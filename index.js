@@ -502,7 +502,9 @@ class Resolver extends dns.promises.Resolver {
 
         case dns.V4MAPPED: {
           if (options.family === 6 && !answers.some((answer) => isIPv6(answer)))
-            answers = answers.map((answer) => ipaddr.process(answer));
+            answers = answers.map((answer) =>
+              ipaddr.parse(answer).toIPv4MappedAddress().toString()
+            );
           break;
         }
 
@@ -515,14 +517,18 @@ class Resolver extends dns.promises.Resolver {
         case dns.ADDRCONFIG | dns.V4MAPPED: {
           options.family = this.constructor.getAddrConfigTypes();
           if (options.family === 6 && !answers.some((answer) => isIPv6(answer)))
-            answers = answers.map((answer) => ipaddr.process(answer));
+            answers = answers.map((answer) =>
+              ipaddr.parse(answer).toIPv4MappedAddress().toString()
+            );
           break;
         }
 
         // eslint-disable-next-line no-bitwise
         case dns.V4MAPPED | dns.ALL: {
           if (options.family === 6 && !answers.some((answer) => isIPv6(answer)))
-            answers = answers.map((answer) => ipaddr.process(answer));
+            answers = answers.map((answer) =>
+              ipaddr.parse(answer).toIPv4MappedAddress().toString()
+            );
           options.all = true;
           break;
         }
@@ -531,7 +537,9 @@ class Resolver extends dns.promises.Resolver {
         case dns.ADDRCONFIG | dns.V4MAPPED | dns.ALL: {
           options.family = this.constructor.getAddrConfigTypes();
           if (options.family === 6 && !answers.some((answer) => isIPv6(answer)))
-            answers = answers.map((answer) => ipaddr.process(answer));
+            answers = answers.map((answer) =>
+              ipaddr.parse(answer).toIPv4MappedAddress().toString()
+            );
           options.all = true;
 
           break;
