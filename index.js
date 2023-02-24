@@ -286,6 +286,8 @@ class Resolver extends dns.promises.Resolver {
     // if `cache: false` then caching is disabled
     // but note that this doesn't disable `got` dnsCache which is separate
     // so to turn that off, you need to supply `dnsCache: undefined` in `got` object (?)
+    if (this.options.cache === true) this.options.cache = new Map();
+
     if (this.options.cache instanceof Map) {
       // each of the types have their own Keyv with prefix
       for (const type of this.constructor.TYPES) {
