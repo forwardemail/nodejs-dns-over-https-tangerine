@@ -283,6 +283,31 @@ class Resolver extends dns.promises.Resolver {
       options
     );
 
+    // timeout must be >= 0
+    if (!Number.isFinite(this.options.timeout) || this.options.timeout < 0)
+      throw new Error('Timeout must be >= 0');
+
+    // tries must be >= 1
+    if (!Number.isFinite(this.options.tries) || this.options.tries < 1)
+      throw new Error('Tries must be >= 1');
+
+    // perform validation by re-using `setServers` method
+    this.setServers([...this.options.servers]);
+
+    if (
+      !(this.options.servers instanceof Set) ||
+      this.options.servers.size === 0
+    )
+      throw new Error(
+        'Servers must be an Array or Set with at least one server'
+      );
+
+    if (!['http', 'https'].includes(this.options.protocol))
+      throw new Error('Protocol must be http or https');
+
+    if (!['verbatim', 'ipv4first'].includes(this.options.dnsOrder))
+      throw new Error('DNS order must be either verbatim or ipv4first');
+
     // if `cache: false` then caching is disabled
     // but note that this doesn't disable `got` dnsCache which is separate
     // so to turn that off, you need to supply `dnsCache: undefined` in `got` object (?)
@@ -702,7 +727,7 @@ class Resolver extends dns.promises.Resolver {
   //
   async #request(
     pkt,
-    ip,
+    server,
     abortController,
     requestTimeout = this.options.timeout
   ) {
@@ -711,7 +736,8 @@ class Resolver extends dns.promises.Resolver {
 
     let localAddress;
     let localPort;
-    if (isIPv4(ip)) {
+    let url = `${this.options.protocol}://${server}/dns-query`;
+    if (isIPv4(new URL(url).hostname)) {
       localAddress = this.options.ipv4;
       if (this.options.ipv4LocalPort) localPort = this.options.ipv4LocalPort;
     } else {
@@ -728,7 +754,6 @@ class Resolver extends dns.promises.Resolver {
     if (localPort) options.localPort = localPort;
 
     // <https://github.com/hildjj/dohdec/blob/43564118c40f2127af871bdb4d40f615409d4b9c/pkg/dohdec/lib/doh.js#L117-L120>
-    let url = `${this.options.protocol}://${ip}/dns-query`;
     if (this.options.undici.method === 'GET') {
       if (!dohdec) await pWaitFor(() => Boolean(dohdec));
       url += `?dns=${dohdec.DNSoverHTTPS.base64urlEncode(pkt)}`;
@@ -765,7 +790,8 @@ class Resolver extends dns.promises.Resolver {
       let buffer;
       const errors = [];
       // NOTE: we would have used `p-map-series` but it did not support abort/break
-      for (const ip of this.options.servers) {
+      const servers = [...this.options.servers];
+      for (const server of servers) {
         const ipErrors = [];
         for (let i = 0; i < this.options.tries; i++) {
           try {
@@ -773,7 +799,7 @@ class Resolver extends dns.promises.Resolver {
             // eslint-disable-next-line no-await-in-loop
             const response = await this.#request(
               pkt,
-              ip,
+              server,
               abortController,
               this.options.timeout * 2 ** i
             );
@@ -828,7 +854,7 @@ class Resolver extends dns.promises.Resolver {
         // break out if we had a response
         if (buffer) break;
         if (ipErrors.length > 0) {
-          // if the `ip` had all errors, then remove it and add to end
+          // if the `server` had all errors, then remove it and add to end
           // (this ensures we don't keep retrying servers that keep timing out)
           // (which improves upon default c-ares behavior)
           if (this.options.servers.size > 1 && this.options.smartRotate) {
@@ -836,9 +862,9 @@ class Resolver extends dns.promises.Resolver {
               new Error('Rotating DNS servers due to issues'),
               ...ipErrors
             ]);
-            this.options.logger.error(err, { ip });
-            this.options.servers.delete(ip);
-            this.options.servers.add(ip);
+            this.options.logger.error(err, { server });
+            this.options.servers.delete(server);
+            this.options.servers.add(server);
           }
 
           errors.push(...ipErrors);
@@ -1028,16 +1054,17 @@ class Resolver extends dns.promises.Resolver {
   }
 
   setServers(servers) {
-    if (
-      !Array.isArray(servers) ||
-      servers.length === 0 ||
-      servers.some((s) => typeof s !== 'string' || s.trim() === '' || !isIP(s))
-    ) {
+    if (!Array.isArray(servers) || servers.length === 0) {
       const err = new TypeError(
         'The "name" argument must be an instance of Array.'
       );
       err.code = 'ERR_INVALID_ARG_TYPE';
     }
+
+    //
+    // TODO: every address must be ipv4 or ipv6 (use `new URL` to parse and check)
+    // servers [ string ] - array of RFC 5952 formatted addresses
+    //
 
     // <https://github.com/nodejs/node/blob/9bbde3d7baef584f14569ef79f116e9d288c7aaa/lib/internal/dns/utils.js#L87-L95>
     this.options.servers = new Set(servers);

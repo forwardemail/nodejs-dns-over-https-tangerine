@@ -12,6 +12,26 @@ const { Resolver } = dns.promises;
 //
 // NOTE: tests won't work if you're behind a VPN with DNS blackholed
 //
+test.before(async (t) => {
+  // attempt to setServers and perform a DNS lookup
+  const tangerine = new Tangerine();
+  const resolver = new Resolver({ timeout: 3000, tries: 1 });
+  resolver.setServers(tangerine.getServers());
+
+  t.deepEqual(resolver.getServers(), tangerine.getServers());
+
+  try {
+    t.log('Testing VPN with DNS blackhole');
+    await resolver.resolve('cloudflare.com', 'A');
+  } catch (err) {
+    if (err.code === dns.TIMEOUT) {
+      t.context.isBlackholed = true;
+      t.log('VPN with DNS blackholed detected');
+    } else {
+      throw err;
+    }
+  }
+});
 
 // new Tangerine(options)
 test('instance', (t) => {
@@ -47,24 +67,22 @@ test('getServers and setServers', (t) => {
   t.deepEqual(tangerine.getServers(), resolver.getServers());
 });
 
-test.todo('getServers with ::0 returns accurate response');
-// test('getServers with ::0 returns accurate response', (t) => {
-//   const servers = ['1.1.1.1', '::0'];
+test.todo('getServers with [::0] returns accurate response');
+// test('getServers with [::0] returns accurate response', (t) => {
+//   const servers = ['1.1.1.1', '[::0]'];
+//   const tangerine = new Tangerine();
+//   const resolver = new Resolver();
 //   resolver.setServers(servers);
 //   tangerine.setServers(servers);
-//   // t.log('tangerine.getServers', tangerine.getServers());
-//   // t.log('resolver.getServers', resolver.getServers());
 //   t.deepEqual(tangerine.getServers(), resolver.getServers());
 // });
 
 test('getServers with IPv6 returns accurate response', (t) => {
   const tangerine = new Tangerine();
   const resolver = new Resolver();
-  const servers = ['1.1.1.1', '2606:4700:4700::1002'];
+  const servers = ['1.1.1.1', '2001:db8::1:80', '[2001:db8::1]:8080'];
   resolver.setServers(servers);
   tangerine.setServers(servers);
-  // t.log('tangerine.getServers', tangerine.getServers());
-  // t.log('resolver.getServers', resolver.getServers());
   t.deepEqual(tangerine.getServers(), resolver.getServers());
 });
 
@@ -230,7 +248,7 @@ for (const host of [
   test(`resolve("${host}")`, async (t) => {
     const tangerine = new Tangerine();
     const resolver = new Resolver();
-    resolver.setServers(tangerine.getServers());
+    if (!t.context.isBlackholed) resolver.setServers(tangerine.getServers());
     let r1 = await tangerine.resolve(host);
     let r2 = await resolver.resolve(host);
     // see explanation below regarding this under "A" and "AAAA" in switch/case
@@ -245,7 +263,7 @@ for (const host of [
       const resolver = new Resolver();
 
       // mirror DNS servers for accuracy (e.g. SOA)
-      resolver.setServers(tangerine.getServers());
+      if (!t.context.isBlackholed) resolver.setServers(tangerine.getServers());
 
       let h = host;
       if (type === 'SRV') {
@@ -277,7 +295,7 @@ for (const host of [
   test(`resolve4("${host}")`, async (t) => {
     const tangerine = new Tangerine();
     const resolver = new Resolver();
-    resolver.setServers(tangerine.getServers());
+    if (!t.context.isBlackholed) resolver.setServers(tangerine.getServers());
     let r1;
     try {
       r1 = await tangerine.resolve4(host);
@@ -299,7 +317,7 @@ for (const host of [
   test(`resolve6("${host}")`, async (t) => {
     const tangerine = new Tangerine();
     const resolver = new Resolver();
-    resolver.setServers(tangerine.getServers());
+    if (!t.context.isBlackholed) resolver.setServers(tangerine.getServers());
     let r1;
     try {
       r1 = await tangerine.resolve6(host);
@@ -321,7 +339,7 @@ for (const host of [
   test(`resolveAny("${host}")`, async (t) => {
     const tangerine = new Tangerine();
     const resolver = new Resolver();
-    resolver.setServers(tangerine.getServers());
+    if (!t.context.isBlackholed) resolver.setServers(tangerine.getServers());
 
     let r1;
     try {
@@ -344,7 +362,7 @@ for (const host of [
   test(`resolveCaa("${host}")`, async (t) => {
     const tangerine = new Tangerine();
     const resolver = new Resolver();
-    resolver.setServers(tangerine.getServers());
+    if (!t.context.isBlackholed) resolver.setServers(tangerine.getServers());
 
     let r1;
     try {
@@ -367,7 +385,7 @@ for (const host of [
   test(`resolveCname("${host}")`, async (t) => {
     const tangerine = new Tangerine();
     const resolver = new Resolver();
-    resolver.setServers(tangerine.getServers());
+    if (!t.context.isBlackholed) resolver.setServers(tangerine.getServers());
 
     let r1;
     try {
@@ -390,7 +408,7 @@ for (const host of [
   test(`resolveMx("${host}")`, async (t) => {
     const tangerine = new Tangerine();
     const resolver = new Resolver();
-    resolver.setServers(tangerine.getServers());
+    if (!t.context.isBlackholed) resolver.setServers(tangerine.getServers());
 
     let r1;
     try {
@@ -413,7 +431,7 @@ for (const host of [
   test(`resolveNaptr("${host}")`, async (t) => {
     const tangerine = new Tangerine();
     const resolver = new Resolver();
-    resolver.setServers(tangerine.getServers());
+    if (!t.context.isBlackholed) resolver.setServers(tangerine.getServers());
 
     let r1;
     try {
@@ -436,7 +454,7 @@ for (const host of [
   test(`resolveNs("${host}")`, async (t) => {
     const tangerine = new Tangerine();
     const resolver = new Resolver();
-    resolver.setServers(tangerine.getServers());
+    if (!t.context.isBlackholed) resolver.setServers(tangerine.getServers());
 
     let r1;
     try {
@@ -459,7 +477,7 @@ for (const host of [
   test(`resolvePtr("${host}")`, async (t) => {
     const tangerine = new Tangerine();
     const resolver = new Resolver();
-    resolver.setServers(tangerine.getServers());
+    if (!t.context.isBlackholed) resolver.setServers(tangerine.getServers());
 
     let r1;
     try {
@@ -482,7 +500,7 @@ for (const host of [
   test(`resolveSoa("${host}")`, async (t) => {
     const tangerine = new Tangerine();
     const resolver = new Resolver();
-    resolver.setServers(tangerine.getServers());
+    if (!t.context.isBlackholed) resolver.setServers(tangerine.getServers());
 
     let r1;
     try {
@@ -505,7 +523,7 @@ for (const host of [
   test(`resolveSrv("${host}")`, async (t) => {
     const tangerine = new Tangerine();
     const resolver = new Resolver();
-    resolver.setServers(tangerine.getServers());
+    if (!t.context.isBlackholed) resolver.setServers(tangerine.getServers());
 
     let r1;
     try {
@@ -528,7 +546,7 @@ for (const host of [
   test(`resolveTxt("${host}")`, async (t) => {
     const tangerine = new Tangerine();
     const resolver = new Resolver();
-    resolver.setServers(tangerine.getServers());
+    if (!t.context.isBlackholed) resolver.setServers(tangerine.getServers());
 
     let r1;
     try {
@@ -564,7 +582,7 @@ test('reverse', async (t) => {
   // returns an array of reversed hostnames from IP address
   const tangerine = new Tangerine();
   const resolver = new Resolver();
-  resolver.setServers(tangerine.getServers());
+  if (!t.context.isBlackholed) resolver.setServers(tangerine.getServers());
 
   let r1;
   try {
