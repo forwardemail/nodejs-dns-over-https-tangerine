@@ -17,7 +17,6 @@
     "keyv": "^4.5.2",
     "merge-options": "3.0.4",
     "p-map": "4",
-    "p-timeout": "4",
     "p-wait-for": "3",
     "port-numbers": "^6.0.1",
     "semver": "^7.3.8",
