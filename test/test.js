@@ -10,6 +10,16 @@ const Tangerine = require('..');
 
 const { Resolver } = dns.promises;
 
+test('exports', async (t) => {
+  const pkg = await import('../index.js');
+  const Tangerine = pkg.default;
+  const tangerine = new Tangerine();
+  await t.notThrowsAsync(tangerine.resolve('cloudflare.com'));
+});
+
+// tangerine.setDefaultResultOrder(order)
+test.todo('setDefaultResultOrder');
+
 //
 // NOTE: tests won't work if you're behind a VPN with DNS blackholed
 //
@@ -604,14 +614,19 @@ test('reverse', async (t) => {
 });
 
 test('supports got HTTP library', async (t) => {
-  const tangerine = new Tangerine({
-    request: got,
-    requestOptions: {
-      responseType: 'buffer',
-      decompress: false
+  const tangerine = new Tangerine(
+    {
+      requestOptions: {
+        responseType: 'buffer',
+        decompress: false,
+        retry: {
+          limit: 0
+        }
+      },
+      requestTimeout: (ms) => ({ timeout: { request: ms } })
     },
-    requestTimeout: (ms) => ({ timeout: { request: ms } })
-  });
+    got
+  );
   const resolver = new Resolver();
   if (!t.context.isBlackholed) resolver.setServers(tangerine.getServers());
   const host = 'cloudflare.com';
@@ -622,6 +637,3 @@ test('supports got HTTP library', async (t) => {
   if (!_.isError(r2)) r2 = r2.every((o) => isIPv4(o) || isIPv6(o));
   t.deepEqual(r1, r2);
 });
-
-// tangerine.setDefaultResultOrder(order)
-test.todo('setDefaultResultOrder');

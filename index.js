@@ -16,7 +16,6 @@ const pWaitFor = require('p-wait-for');
 const packet = require('dns-packet');
 const semver = require('semver');
 const { getService } = require('port-numbers');
-const { request } = require('undici');
 
 const pkg = require('./package.json');
 
@@ -214,7 +213,7 @@ class Tangerine extends dns.promises.Resolver {
     return err;
   }
 
-  constructor(options = {}) {
+  constructor(options = {}, request = require('undici').request) {
     const timeout =
       options.timeout && options.timeout !== -1 ? options.timeout : 5000;
     const tries = options.tries || 4;
@@ -223,6 +222,13 @@ class Tangerine extends dns.promises.Resolver {
       timeout,
       tries
     });
+
+    if (typeof request !== 'function')
+      throw new Error(
+        'Request option must be a function (e.g. `undici.request` or `got`)'
+      );
+
+    this.request = request;
 
     this.options = mergeOptions(
       {
@@ -237,8 +243,6 @@ class Tangerine extends dns.promises.Resolver {
         // dns servers will optionally retry in series
         // and servers that error will get shifted to the end of list
         servers: new Set(['1.1.1.1', '1.0.0.1']),
-        // HTTP library function to use
-        request,
         requestOptions: {
           method: 'GET',
           headers: {
@@ -768,7 +772,7 @@ class Tangerine extends dns.promises.Resolver {
     }
 
     debug('request', { url, options });
-    const response = await this.options.request(url, options);
+    const response = await this.request(url, options);
     return response;
   }
 

@@ -19,8 +19,7 @@
     "p-map": "4",
     "p-wait-for": "3",
     "port-numbers": "^6.0.1",
-    "semver": "^7.3.8",
-    "undici": "^5.20.0"
+    "semver": "^7.3.8"
   },
   "devDependencies": {
     "@commitlint/cli": "^17.4.4",
@@ -46,6 +45,7 @@
     "request": "^2.88.2",
     "sort-keys": "4.2.0",
     "superagent": "^8.0.9",
+    "undici": "^5.20.0",
     "xo": "^0.53.1"
   },
   "engines": {
@@ -132,6 +132,14 @@
   ],
   "license": "MIT",
   "main": "index.js",
+  "peerDependencies": {
+    "undici": "*"
+  },
+  "peerDependenciesMeta": {
+    "undici": {
+      "optional": true
+    }
+  },
   "publishConfig": {
     "access": "public"
   },
