@@ -10,16 +10,6 @@ const Tangerine = require('..');
 
 const { Resolver } = dns.promises;
 
-test('exports', async (t) => {
-  const pkg = await import('../index.js');
-  const Tangerine = pkg.default;
-  const tangerine = new Tangerine();
-  await t.notThrowsAsync(tangerine.resolve('cloudflare.com'));
-});
-
-// tangerine.setDefaultResultOrder(order)
-test.todo('setDefaultResultOrder');
-
 //
 // NOTE: tests won't work if you're behind a VPN with DNS blackholed
 //
@@ -43,6 +33,16 @@ test.before(async (t) => {
     }
   }
 });
+
+test('exports', async (t) => {
+  const pkg = await import('../index.js');
+  const Tangerine = pkg.default;
+  const tangerine = new Tangerine();
+  await t.notThrowsAsync(tangerine.resolve('cloudflare.com'));
+});
+
+// tangerine.setDefaultResultOrder(order)
+test.todo('setDefaultResultOrder');
 
 // new Tangerine(options)
 test('instance', (t) => {
