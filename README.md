@@ -176,7 +176,7 @@ import Tangerine from 'tangerine';
 const tangerine = new Tangerine();
 // or `const resolver = new Tangerine()`
 
-tangerine.resolve('forwardemail.net', 'A').then(console.log);
+tangerine.resolve('forwardemail.net').then(console.log);
 ```
 
 ### CommonJS (CJS)
@@ -189,7 +189,7 @@ const Tangerine = require('tangerine');
 const tangerine = new Tangerine();
 // or `const resolver = new Tangerine()`
 
-tangerine.resolve('forwardemail.net', 'A').then(console.log);
+tangerine.resolve('forwardemail.net').then(console.log);
 ```
 
 
