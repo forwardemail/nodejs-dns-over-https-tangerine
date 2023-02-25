@@ -1,9 +1,10 @@
 const dns = require('node:dns');
 const { isIPv4, isIPv6 } = require('node:net');
 
-const test = require('ava');
-const sortKeys = require('sort-keys');
 const _ = require('lodash');
+const got = require('got');
+const sortKeys = require('sort-keys');
+const test = require('ava');
 
 const Tangerine = require('..');
 
@@ -600,6 +601,26 @@ test('reverse', async (t) => {
 
   t.deepEqual(r1, ['one.one.one.one']);
   t.deepEqual(r2, ['one.one.one.one']);
+});
+
+test('supports got HTTP library', async (t) => {
+  const tangerine = new Tangerine({
+    request: got,
+    requestOptions: {
+      responseType: 'buffer',
+      decompress: false
+    },
+    requestTimeout: (ms) => ({ timeout: { request: ms } })
+  });
+  const resolver = new Resolver();
+  if (!t.context.isBlackholed) resolver.setServers(tangerine.getServers());
+  const host = 'cloudflare.com';
+  let r1 = await tangerine.resolve(host);
+  let r2 = await resolver.resolve(host);
+  // see explanation below regarding this under "A" and "AAAA" in switch/case
+  if (!_.isError(r1)) r1 = r1.every((o) => isIPv4(o) || isIPv6(o));
+  if (!_.isError(r2)) r2 = r2.every((o) => isIPv4(o) || isIPv6(o));
+  t.deepEqual(r1, r2);
 });
 
 // tangerine.setDefaultResultOrder(order)

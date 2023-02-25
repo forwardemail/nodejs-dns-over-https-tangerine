@@ -12,7 +12,6 @@ const getStream = require('get-stream');
 const ipaddr = require('ipaddr.js');
 const mergeOptions = require('merge-options');
 const pMap = require('p-map');
-const pTimeout = require('p-timeout');
 const pWaitFor = require('p-wait-for');
 const packet = require('dns-packet');
 const semver = require('semver');
@@ -238,7 +237,9 @@ class Tangerine extends dns.promises.Resolver {
         // dns servers will optionally retry in series
         // and servers that error will get shifted to the end of list
         servers: new Set(['1.1.1.1', '1.0.0.1']),
-        undici: {
+        // HTTP library function to use
+        request,
+        requestOptions: {
           method: 'GET',
           headers: {
             'content-type': 'application/dns-message',
@@ -246,6 +247,7 @@ class Tangerine extends dns.promises.Resolver {
             accept: 'application/dns-message'
           }
         },
+        requestTimeout: (ms) => ({ bodyTimeout: ms }),
         //
         // NOTE: we set the default to "get" since it is faster from `benchmark` results
         //
@@ -290,6 +292,14 @@ class Tangerine extends dns.promises.Resolver {
     // tries must be >= 1
     if (!Number.isFinite(this.options.tries) || this.options.tries < 1)
       throw new Error('Tries must be >= 1');
+
+    // request option method must be either GET or POST
+    if (
+      !['get', 'post'].includes(
+        this.options.requestOptions.method.toLowerCase()
+      )
+    )
+      throw new Error('Request options method must be either GET or POST');
 
     // perform validation by re-using `setServers` method
     this.setServers([...this.options.servers]);
@@ -725,12 +735,7 @@ class Tangerine extends dns.promises.Resolver {
   //       was too confusing and the documentation was lacking, misleading, or incredibly complex
   //       <https://github.com/sindresorhus/got/issues/2226>
   //
-  async #request(
-    pkt,
-    server,
-    abortController,
-    requestTimeout = this.options.timeout
-  ) {
+  async #request(pkt, server, abortController, timeout = this.options.timeout) {
     // safeguard in case aborted
     if (abortController.signal.aborted) return;
 
@@ -746,25 +751,24 @@ class Tangerine extends dns.promises.Resolver {
     }
 
     const options = {
-      signal: abortController.signal,
-      ...this.options.undici
+      ...this.options.requestOptions,
+      ...this.options.requestTimeout(timeout), // returns `{ bodyTimeout: requestTimeout }`
+      signal: abortController.signal
     };
 
     if (localAddress !== '0.0.0.0') options.localAddress = localAddress;
     if (localPort) options.localPort = localPort;
 
     // <https://github.com/hildjj/dohdec/blob/43564118c40f2127af871bdb4d40f615409d4b9c/pkg/dohdec/lib/doh.js#L117-L120>
-    if (this.options.undici.method === 'GET') {
+    if (this.options.requestOptions.method.toLowerCase() === 'get') {
       if (!dohdec) await pWaitFor(() => Boolean(dohdec));
       url += `?dns=${dohdec.DNSoverHTTPS.base64urlEncode(pkt)}`;
     } else {
       options.body = pkt;
     }
 
-    debug('request', { url, options, requestTimeout });
-    const response = await pTimeout(request(url, options), requestTimeout, {
-      signal: abortController.signal
-    });
+    debug('request', { url, options });
+    const response = await this.options.request(url, options);
     return response;
   }
 
@@ -812,8 +816,10 @@ class Tangerine extends dns.promises.Resolver {
 
               // eslint-disable-next-line max-depth
               if (body && statusCode >= 200 && statusCode < 300) {
-                // eslint-disable-next-line no-await-in-loop
-                buffer = await getStream.buffer(body);
+                buffer = Buffer.isBuffer(body)
+                  ? body
+                  : // eslint-disable-next-line no-await-in-loop
+                    await getStream.buffer(body);
                 // eslint-disable-next-line max-depth
                 if (!abortController.signal.aborted) abortController.abort();
                 break;
