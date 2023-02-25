@@ -31,7 +31,7 @@ import('dohdec').then((obj) => {
 });
 
 // <https://github.com/szmarczak/cacheable-lookup/pull/76>
-class Resolver extends dns.promises.Resolver {
+class Tangerine extends dns.promises.Resolver {
   static isValidPort(port) {
     return Number.isSafeInteger(port) && port >= 0 && port <= 65535;
   }
@@ -1388,4 +1388,4 @@ class Resolver extends dns.promises.Resolver {
   }
 }
 
-module.exports = Resolver;
+module.exports = Tangerine;
