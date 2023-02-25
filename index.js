@@ -815,7 +815,8 @@ class Tangerine extends dns.promises.Resolver {
             // if aborted signal then returns early
             // eslint-disable-next-line max-depth
             if (response) {
-              const { statusCode, body, headers } = response;
+              const { body, headers } = response;
+              const statusCode = response.status || response.statusCode;
               debug('response', { statusCode, headers });
 
               // eslint-disable-next-line max-depth
