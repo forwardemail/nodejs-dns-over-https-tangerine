@@ -12,6 +12,7 @@ const getStream = require('get-stream');
 const ipaddr = require('ipaddr.js');
 const mergeOptions = require('merge-options');
 const pMap = require('p-map');
+const pTimeout = require('p-timeout');
 const pWaitFor = require('p-wait-for');
 const packet = require('dns-packet');
 const semver = require('semver');
@@ -69,6 +70,8 @@ class Tangerine extends dns.promises.Resolver {
     let err;
     if (errors.length === 1) {
       err = errors[0];
+    } else if (errors.every((e) => e instanceof pTimeout.TimeoutError)) {
+      err = errors[0];
     } else {
       err = new Error(
         [...new Set(errors.map((e) => e.message).filter(Boolean))].join('; ')
@@ -76,6 +79,14 @@ class Tangerine extends dns.promises.Resolver {
       err.stack = [...new Set(errors.map((e) => e.stack).filter(Boolean))].join(
         '\n\n'
       );
+
+      // if all errors had `name` and they were all the same then preserve it
+      if (
+        typeof errors[0].name !== 'undefined' &&
+        errors.every((e) => e.name === errors[0].name)
+      )
+        err.name = errors[0].name;
+
       // if all errors had `code` and they were all the same then preserve it
       if (
         typeof errors[0].code !== 'undefined' &&
@@ -251,7 +262,6 @@ class Tangerine extends dns.promises.Resolver {
             accept: 'application/dns-message'
           }
         },
-        requestTimeout: (ms) => ({ bodyTimeout: ms }),
         //
         // NOTE: we set the default to "get" since it is faster from `benchmark` results
         //
@@ -756,7 +766,6 @@ class Tangerine extends dns.promises.Resolver {
 
     const options = {
       ...this.options.requestOptions,
-      ...this.options.requestTimeout(timeout), // returns `{ bodyTimeout: requestTimeout }`
       signal: abortController.signal
     };
 
@@ -772,7 +781,9 @@ class Tangerine extends dns.promises.Resolver {
     }
 
     debug('request', { url, options });
-    const response = await this.request(url, options);
+    const response = await pTimeout(this.request(url, options), timeout, {
+      signal: abortController.signal
+    });
     return response;
   }
 
@@ -901,7 +912,9 @@ class Tangerine extends dns.promises.Resolver {
       const err = this.constructor.createError(
         name,
         rrtype,
-        _err.code,
+        _err instanceof pTimeout.TimeoutError || _err.name === 'TimeoutError'
+          ? dns.TIMEOUT
+          : _err.code,
         _err.errno
       );
       // then map it to dns.CONNREFUSED

@@ -613,6 +613,15 @@ test('reverse', async (t) => {
   t.deepEqual(r2, ['one.one.one.one']);
 });
 
+test('timeout', async (t) => {
+  const tangerine = new Tangerine({
+    timeout: 1,
+    tries: 1
+  });
+  const err = await t.throwsAsync(tangerine.resolve('cloudflare.com'));
+  t.is(err.code, dns.TIMEOUT);
+});
+
 test('supports got HTTP library', async (t) => {
   const tangerine = new Tangerine(
     {
@@ -622,8 +631,7 @@ test('supports got HTTP library', async (t) => {
         retry: {
           limit: 0
         }
-      },
-      requestTimeout: (ms) => ({ timeout: { request: ms } })
+      }
     },
     got
   );
