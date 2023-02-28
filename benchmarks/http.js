@@ -20,8 +20,6 @@ const PORT = process.env.BENCHMARK_PORT
 const PATH = process.env.BENCHMARK_PATH || '/test';
 const URL = `${PROTOCOL}://${HOST}:${PORT}${PATH}`;
 
-const suite = new Benchmark.Suite();
-
 axios.defaults.baseURL = `http://${HOST}`;
 
 if (HOST === 'test') {
@@ -43,6 +41,12 @@ if (HOST === 'test') {
 
   fetchMock.mock(URL, 200);
 }
+
+const suite = new Benchmark.Suite();
+
+suite.on('start', function (ev) {
+  console.log(`Started: ${ev.currentTarget.name}`);
+});
 
 suite.add('http.request POST request', {
   defer: true,
@@ -190,12 +194,14 @@ suite.add('phin POST request', {
   }
 });
 
-suite.on('complete', function () {
-  console.log('Fastest is ' + this.filter('fastest').map('name'));
+suite.on('cycle', function (ev) {
+  console.log(String(ev.target));
 });
 
-suite.on('cycle', function (event) {
-  console.log(String(event.target));
+suite.on('complete', function () {
+  console.log(
+    'Fastest is ' + this.filter('fastest').map('name').join(', ') + '\n'
+  );
 });
 
 suite.run();

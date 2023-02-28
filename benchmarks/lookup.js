@@ -1,6 +1,5 @@
 const dns = require('node:dns');
 
-const Keyv = require('keyv');
 const Benchmark = require('benchmark');
 
 const Tangerine = require('..');
@@ -12,13 +11,13 @@ dns.setServers(['1.1.1.1', '1.0.0.1']);
 const resolver = new dns.promises.Resolver(opts);
 resolver.setServers(['1.1.1.1', '1.0.0.1']);
 
-const lookupCache = new Keyv();
+const cache = new Map();
 
 async function lookupWithCache(host) {
-  let result = await lookupCache.get(host);
+  let result = cache.get(host);
   if (result) return result;
   result = await dns.promises.lookup(host);
-  if (result) await lookupCache.set(host, result);
+  if (result) cache.set(host, result);
   return result;
 }
 
@@ -33,9 +32,13 @@ const tangerineGetNoCache = new Tangerine({ ...opts, cache: false });
 
 const host = 'netflix.com';
 
-const suit = new Benchmark.Suite('lookup');
+const suite = new Benchmark.Suite('lookup');
 
-suit.add('tangerine.lookup POST with caching using Cloudflare', {
+suite.on('start', function (ev) {
+  console.log(`Started: ${ev.currentTarget.name}`);
+});
+
+suite.add('tangerine.lookup POST with caching using Cloudflare', {
   defer: true,
   async fn(deferred) {
     await tangerine.lookup(host);
@@ -43,7 +46,7 @@ suit.add('tangerine.lookup POST with caching using Cloudflare', {
   }
 });
 
-suit.add('tangerine.lookup POST without caching using Cloudflare', {
+suite.add('tangerine.lookup POST without caching using Cloudflare', {
   defer: true,
   async fn(deferred) {
     await tangerineNoCache.lookup(host);
@@ -51,7 +54,7 @@ suit.add('tangerine.lookup POST without caching using Cloudflare', {
   }
 });
 
-suit.add('tangerine.lookup GET with caching using Cloudflare', {
+suite.add('tangerine.lookup GET with caching using Cloudflare', {
   defer: true,
   async fn(deferred) {
     await tangerineGet.lookup(host);
@@ -59,7 +62,7 @@ suit.add('tangerine.lookup GET with caching using Cloudflare', {
   }
 });
 
-suit.add('tangerine.lookup GET without caching using Cloudflare', {
+suite.add('tangerine.lookup GET without caching using Cloudflare', {
   defer: true,
   async fn(deferred) {
     await tangerineGetNoCache.lookup(host);
@@ -67,7 +70,7 @@ suit.add('tangerine.lookup GET without caching using Cloudflare', {
   }
 });
 
-suit.add('dns.promises.lookup with caching using Cloudflare', {
+suite.add('dns.promises.lookup with caching using Cloudflare', {
   defer: true,
   async fn(deferred) {
     try {
@@ -78,7 +81,7 @@ suit.add('dns.promises.lookup with caching using Cloudflare', {
   }
 });
 
-suit.add('dns.promises.lookup without caching using Cloudflare', {
+suite.add('dns.promises.lookup without caching using Cloudflare', {
   defer: true,
   async fn(deferred) {
     try {
@@ -89,19 +92,19 @@ suit.add('dns.promises.lookup without caching using Cloudflare', {
   }
 });
 
-suit.on('cycle', (ev) => {
+suite.on('cycle', (ev) => {
   console.log(String(ev.target));
 });
 
-suit.on('complete', function () {
+suite.on('complete', function () {
   console.log(
     `Fastest without caching is: ${this.filter((bench) =>
       bench.name.includes('without caching')
     )
       .filter('fastest')
       .map('name')
-      .join(', ')}`
+      .join(', ')}\n`
   );
 });
 
-suit.run();
+suite.run();

@@ -11,11 +11,11 @@
 </div>
 <br />
 <div align="center">
-  🍊 <a href="https://github.com/forwardemail/tangerine" target="_blank">Tangerine</a> is the best <a href="https://nodejs.org" target="_blank">Node.js</a> drop-in replacement for <a href="https://nodejs.org/api/dns.html#resolveroptions" target="_blank">dns.promises.Resolver</a> using <a href="https://en.wikipedia.org/wiki/DNS_over_HTTPS" target="_blank">DNS over HTTPS</a> ("DoH") via <a href="https://github.com/nodejs/undici" target="_blank">undici</a> with built-in retries, timeouts, smart server rotation, <a href="https://developer.mozilla.org/en-US/docs/Web/API/AbortController" target="_blank">AbortControllers</a>, and caching support for multiple backends via <a href="https://github.com/jaredwray/keyv" target="_blank">Keyv</a>.
+  🍊 <a href="https://github.com/forwardemail/tangerine" target="_blank">Tangerine</a> is the best <a href="https://nodejs.org" target="_blank">Node.js</a> drop-in replacement for <a href="https://nodejs.org/api/dns.html#resolveroptions" target="_blank">dns.promises.Resolver</a> using <a href="https://en.wikipedia.org/wiki/DNS_over_HTTPS" target="_blank">DNS over HTTPS</a> ("DoH") via <a href="https://github.com/nodejs/undici" target="_blank">undici</a> with built-in retries, timeouts, smart server rotation, <a href="https://developer.mozilla.org/en-US/docs/Web/API/AbortController" target="_blank">AbortControllers</a>, and caching support for multiple backends (with TTL support).
 </div>
 <hr />
 <div align="center">
-  ⚡ <mark><a href="#tangerine-benchmarks"><i><u><strong>FASTER</strong></u></i></a></mark> than <a href="https://nodejs.org/api/dns.html" target="_blank">Node.js <code>dns</code></a>! 🚀 &bull; Supports Node v16+ with ESM/CJS &bull; Made for <a href="https://forwardemail.net" target="_blank"><strong>Forward Email</strong></a>.
+  ⚡ <a href="#tangerine-benchmarks"><i><u><strong>AS FAST AS</strong></u></i></a> native <a href="https://nodejs.org/api/dns.html" target="_blank">Node.js <code>dns</code></a>! 🚀 &bull; Supports Node v16+ with ESM/CJS &bull; Made for <a href="https://forwardemail.net" target="_blank"><strong>Forward Email</strong></a>.
 </div>
 <hr />
 
@@ -55,6 +55,7 @@
   * [`tangerine.setDefaultResultOrder(order)`](#tangerinesetdefaultresultorderorder)
   * [`tangerine.setServers(servers)`](#tangerinesetserversservers)
 * [Options](#options)
+* [Cache](#cache)
 * [Debugging](#debugging)
 * [Benchmarks](#benchmarks)
   * [Tangerine Benchmarks](#tangerine-benchmarks)
@@ -96,7 +97,7 @@ Our team at [Forward Email](https://forwardemail.net) (100% open-source and priv
     * Once popular packages such as [native-dns](https://github.com/tjfontaine/node-dns/issues/111) and [dnscached](https://github.com/yahoo/dnscache/issues/28) are archived or deprecated.
     * [Other packages](https://www.npmjs.com/search?q=dns%20cache) only provide `lookup` functions, have a limited sub-set of methods such as [@zeit/dns-cached-resolver](https://github.com/vercel/dns-cached-resolve), or are unmaintained.
   * Act as a 1:1 drop-in replacement for `dns.promises.Resolver` with DNS over HTTPS ("DoH").
-  * Support caching for multiple backends with [Keyv](https://github.com/jaredwray/keyv) (with respect to DNS answer TTL too!), retries, smart server rotation, and [AbortController](https://developer.mozilla.org/en-US/docs/Web/API/AbortController) usage.
+  * Support caching for multiple backends (with TTL support), retries, smart server rotation, and [AbortController](https://developer.mozilla.org/en-US/docs/Web/API/AbortController) usage.
   * Provide out of the box support for both ECMAScript modules (ESM) **and** CommonJS (CJS) (see discussions [for](https://gist.github.com/sindresorhus/a39789f98801d908bbc7ff3ecc99d99c) and [against](https://gist.github.com/joepie91/bca2fda868c1e8b2c2caf76af7dfcad3)).
 * The native Node.js `dns` module does not support caching out of the box – which is a [highly requested feature](https://github.com/nodejs/node/issues/5893) (but belongs in userland).
 * Writing tests against DNS-related infrastructure requires either hacky DNS mocking or a DNS server (manipulating cache is much easier).
@@ -276,27 +277,86 @@ Tangerine supports a new `ecsSubnet` property in the `options` Object argument.
 
 Similar to the `options` argument from `new dns.promises.Resolver(options)` invocation – :tangerine: Tangerine also has its own options with default `dns` behavior mirrored. See [index.js](https://github.com/forwardemail/tangerine/blob/main/index.js) for more insight into how these options work.
 
-| Property                  | Type                   | Default Value                                                                                                                               | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
-| ------------------------- | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `timeout`                 | `Number`               | `5000`                                                                                                                                      | Number of milliseconds for requests to timeout.                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| `tries`                   | `Number`               | `4`                                                                                                                                         | Number of tries per `server` in `servers` to attempt.                                                                                                                                                                                                                                                                                                                                                                                                            |
-| `servers`                 | `Set` or `Array`       | `new Set(['1.1.1.1', '1.0.0.1'])`                                                                                                           | A Set or Array of [RFC 5952](https://tools.ietf.org/html/rfc5952#section-6) formatted addresses for DNS queries (matches default Node.js dns module behavior).  Duplicates will be removed as this is converted to a `Set` internally.  Defaults to Cloudflare's of `1.1.1.1` and `1.0.0.1`.  If an `Array` is passed, then it will be converted to a `Set`.                                                                                                     |
-| `requestOptions`          | `Object`               | Defaults to an Object with `requestOptions.method` and `requestOptions.headers` properties and values below                                 | Default options to pass to [undici](https://github.com/nodejs/undici) (or your custom HTTP library function passed as `request`).                                                                                                                                                                                                                                                                                                                                |
-| `requestOptions.method`   | `String`               | Defaults to `"GET"` (must be either `"GET"` or `"POST"`, case-insensitive depending on library you use).                                    | Default HTTP method to use for DNS over HTTP ("DoH") requests.                                                                                                                                                                                                                                                                                                                                                                                                   |
-| `requestOptions.headers`  | `Object`               | Defaults to `{ 'content-type': 'application/dns-message', 'user-agent': pkg.name + "/" + pkg.version, accept: 'application/dns-message' }`. | Default HTTP headers to use for DNS over HTTP ("DoH") requests.                                                                                                                                                                                                                                                                                                                                                                                                  |
-| `protocol`                | `String`               | Defaults to `"https"`.                                                                                                                      | Default HTTP protocol to use for DNS over HTTPS ("DoH") requests.                                                                                                                                                                                                                                                                                                                                                                                                |
-| `dnsOrder`                | `String`               | Defaults to `"verbatim"` for Node.js v17.0.0+ and `"ipv4first"` for older versions.                                                         | Sets the default result order of `lookup` invocations (see [dns.setDefaultResultOrder](https://nodejs.org/api/dns.html#dnssetdefaultresultorderorder) for more insight).                                                                                                                                                                                                                                                                                         |
-| `logger`                  | `Object`               | `false`                                                                                                                                     | This is the default logger.  We recommend using [Cabin](https://github.com/cabinjs) instead of using `console` as your default logger.  Set this value to `false` to disable logging entirely (uses noop function).                                                                                                                                                                                                                                              |
-| `id`                      | `Number` or `Function` | `0`                                                                                                                                         | Default `id` to be passed for DNS packet creation.  This could alternatively be a synchronous or asynchronous function that returns a `Number` (e.g. `id: () => Tangerine.getRandomInt(1, 65534)`).                                                                                                                                                                                                                                                              |
-| `concurrency`             | `Number`               | `os.cpus().length`                                                                                                                          | Default concurrency to use for `resolveAny` lookup via [p-map](https://github.com/sindresorhus/p-map).  The default value is the number of CPU's available to the system using the Node.js `os` module [os.cpus()](https://nodejs.org/api/os.html#oscpus) method.                                                                                                                                                                                                |
-| `ipv4`                    | `String`               | `"0.0.0.0"`                                                                                                                                 | Default IPv4 address to use for HTTP agent `localAddress` if DNS `server` was an IPv4 address.                                                                                                                                                                                                                                                                                                                                                                   |
-| `ipv6`                    | `String`               | `"::0"`                                                                                                                                     | Default IPv6 address to use for HTTP agent `localAddress` if DNS `server` was an IPv6 address.                                                                                                                                                                                                                                                                                                                                                                   |
-| `ipv4Port`                | `Number`               | `undefined`                                                                                                                                 | Default port to use for HTTP agent `localPort` if DNS `server` was an IPv4 address.                                                                                                                                                                                                                                                                                                                                                                              |
-| `ipv6Port`                | `Number`               | `undefined`                                                                                                                                 | Default port to use for HTTP agent `localPort` if DNS `server` was an IPv6 address.                                                                                                                                                                                                                                                                                                                                                                              |
-| `cache`                   | `Map` or `Boolean`     | `new Map()`                                                                                                                                 | Set this to `false` in order to disable caching. Default `Map` instance to use for caching.  Entries are by type, e.g. `map.set('TXT', new Keyv({})`).  If cache set values are not provided, then they will default to a new instance of `Keyv`.  See cache setup and usage in [index.js](https://github.com/forwardemail/tangerine/blob/main/index.js) for more insight.  You can iterate over `Tangerine.TYPES` if necessary to create a similar cache setup. |
-| `returnHTTPErrors`        | `Boolean`              | `false`                                                                                                                                     | Whether to return HTTP errors instead of mapping them to corresponding DNS errors.                                                                                                                                                                                                                                                                                                                                                                               |
-| `smartRotate`             | `Boolean`              | `true`                                                                                                                                      | Whether to do smart server rotation if servers fail.                                                                                                                                                                                                                                                                                                                                                                                                             |
-| `defaultHTTPErrorMessage` | `String`               | `"Unsuccessful HTTP response"`                                                                                                              | Default fallback message if `statusCode` returned from HTTP request was not found in [http.STATUS_CODES](https://nodejs.org/api/http.html#httpstatus_codes).                                                                                                                                                                                                                                                                                                     |
+| Property                  | Type                                                                          | Default Value                                                                                                                               | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| ------------------------- | ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `timeout`                 | `Number`                                                                      | `5000`                                                                                                                                      | Number of milliseconds for requests to timeout.                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| `tries`                   | `Number`                                                                      | `4`                                                                                                                                         | Number of tries per `server` in `servers` to attempt.                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| `servers`                 | `Set` or `Array`                                                              | `new Set(['1.1.1.1', '1.0.0.1'])`                                                                                                           | A Set or Array of [RFC 5952](https://tools.ietf.org/html/rfc5952#section-6) formatted addresses for DNS queries (matches default Node.js dns module behavior).  Duplicates will be removed as this is converted to a `Set` internally.  Defaults to Cloudflare's of `1.1.1.1` and `1.0.0.1`.  If an `Array` is passed, then it will be converted to a `Set`.                                                                                                            |
+| `requestOptions`          | `Object`                                                                      | Defaults to an Object with `requestOptions.method` and `requestOptions.headers` properties and values below                                 | Default options to pass to [undici](https://github.com/nodejs/undici) (or your custom HTTP library function passed as `request`).                                                                                                                                                                                                                                                                                                                                       |
+| `requestOptions.method`   | `String`                                                                      | Defaults to `"GET"` (must be either `"GET"` or `"POST"`, case-insensitive depending on library you use).                                    | Default HTTP method to use for DNS over HTTP ("DoH") requests.                                                                                                                                                                                                                                                                                                                                                                                                          |
+| `requestOptions.headers`  | `Object`                                                                      | Defaults to `{ 'content-type': 'application/dns-message', 'user-agent': pkg.name + "/" + pkg.version, accept: 'application/dns-message' }`. | Default HTTP headers to use for DNS over HTTP ("DoH") requests.                                                                                                                                                                                                                                                                                                                                                                                                         |
+| `protocol`                | `String`                                                                      | Defaults to `"https"`.                                                                                                                      | Default HTTP protocol to use for DNS over HTTPS ("DoH") requests.                                                                                                                                                                                                                                                                                                                                                                                                       |
+| `dnsOrder`                | `String`                                                                      | Defaults to `"verbatim"` for Node.js v17.0.0+ and `"ipv4first"` for older versions.                                                         | Sets the default result order of `lookup` invocations (see [dns.setDefaultResultOrder](https://nodejs.org/api/dns.html#dnssetdefaultresultorderorder) for more insight).                                                                                                                                                                                                                                                                                                |
+| `logger`                  | `Object`                                                                      | `false`                                                                                                                                     | This is the default logger.  We recommend using [Cabin](https://github.com/cabinjs) instead of using `console` as your default logger.  Set this value to `false` to disable logging entirely (uses noop function).                                                                                                                                                                                                                                                     |
+| `id`                      | `Number` or `Function`                                                        | `0`                                                                                                                                         | Default `id` to be passed for DNS packet creation.  This could alternatively be a synchronous or asynchronous function that returns a `Number` (e.g. `id: () => Tangerine.getRandomInt(1, 65534)`).                                                                                                                                                                                                                                                                     |
+| `concurrency`             | `Number`                                                                      | `os.cpus().length`                                                                                                                          | Default concurrency to use for `resolveAny` lookup via [p-map](https://github.com/sindresorhus/p-map).  The default value is the number of CPU's available to the system using the Node.js `os` module [os.cpus()](https://nodejs.org/api/os.html#oscpus) method.                                                                                                                                                                                                       |
+| `ipv4`                    | `String`                                                                      | `"0.0.0.0"`                                                                                                                                 | Default IPv4 address to use for HTTP agent `localAddress` if DNS `server` was an IPv4 address.                                                                                                                                                                                                                                                                                                                                                                          |
+| `ipv6`                    | `String`                                                                      | `"::0"`                                                                                                                                     | Default IPv6 address to use for HTTP agent `localAddress` if DNS `server` was an IPv6 address.                                                                                                                                                                                                                                                                                                                                                                          |
+| `ipv4Port`                | `Number`                                                                      | `undefined`                                                                                                                                 | Default port to use for HTTP agent `localPort` if DNS `server` was an IPv4 address.                                                                                                                                                                                                                                                                                                                                                                                     |
+| `ipv6Port`                | `Number`                                                                      | `undefined`                                                                                                                                 | Default port to use for HTTP agent `localPort` if DNS `server` was an IPv6 address.                                                                                                                                                                                                                                                                                                                                                                                     |
+| `cache`                   | `Map`, `Boolean`, or custom cache implementation with `get` and `set` methods | `new Map()`                                                                                                                                 | Set this to `false` in order to disable caching. By default or if you pass `cache: true`, it will use a new `Map` instance for caching.  See [Cache](#cache) documentation and the options `defaultTTLSeconds`, `maxTTLSeconds`, and `setCacheArgs` below.                                                                                                                                                                                                              |
+| `defaultTTLSeconds`       | `Number` (seconds)                                                            | `300`                                                                                                                                       | The default number of seconds to use for storing results in cache (defaults to [Cloudflare's recommendation](https://developers.cloudflare.com/dns/manage-dns-records/reference/ttl/) of 300 seconds – 5 minutes).                                                                                                                                                                                                                                                      |
+| `maxTTLSeconds`           | `Number` (seconds)                                                            | `86400`                                                                                                                                     | The maximum number of seconds to use for storing results in cache (defaults to [Cloudflare's recommendation](https://developers.cloudflare.com/dns/manage-dns-records/reference/ttl/) of 86,400 seconds – 24 hours – 1 day).                                                                                                                                                                                                                                            |
+| `setCacheArgs`            | `Function`                                                                    | `(key, result) => []`                                                                                                                       | This is a helper function used for cache store providers such as [ioredis](https://github.com/luin/ioredis) or [lru-cache](https://github.com/isaacs/node-lru-cache) which support more than two arguments to `cache.set()` function.  See [Cache](#cache) documentation below for more insight and examples into how this works.  You may want to set this to something such as `(key, result) => [ 'PX', Math.round(result.ttl * 1000) ]` if you are using `ioredis`. |
+| `returnHTTPErrors`        | `Boolean`                                                                     | `false`                                                                                                                                     | Whether to return HTTP errors instead of mapping them to corresponding DNS errors.                                                                                                                                                                                                                                                                                                                                                                                      |
+| `smartRotate`             | `Boolean`                                                                     | `true`                                                                                                                                      | Whether to do smart server rotation if servers fail.                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| `defaultHTTPErrorMessage` | `String`                                                                      | `"Unsuccessful HTTP response"`                                                                                                              | Default fallback message if `statusCode` returned from HTTP request was not found in [http.STATUS_CODES](https://nodejs.org/api/http.html#httpstatus_codes).                                                                                                                                                                                                                                                                                                            |
+
+
+## Cache
+
+:tangerine: Tangerine supports custom cache implementations, such as with [ioredis](https://github.com/luin/ioredis) or any other cache store that has a Map-like implementation with `set(key, value)` and `get(key)` methods.  If your cache implementation allows a third argument to `set()`, such as `set(key, value, ttl)` or `set(key, value, { maxAge })`, then you must set the `setCacheArgs` option respectively (see below examples).  A third argument with TTL argument support is optional as it is already built-in to :tangerine: Tangerine out of the box (cached results store their TTL and expiration time on the objects themselves – view source code for insight).
+
+```sh
+npm install tangerine undici ioredis
+```
+
+```js
+// app.js
+
+const Redis = require('ioredis');
+const Tangerine = require('tangerine');
+
+// <https://github.com/luin/ioredis/issues/1179>
+Redis.Command.setArgumentTransformer('set', (args) => {
+  if (typeof args[1] === 'object') args[1] = JSON.stringify(args[1]);
+  return args;
+});
+
+Redis.Command.setReplyTransformer('get', (value) => {
+  if (value && typeof value === 'string') {
+    try {
+      value = JSON.parse(value);
+    } catch {}
+  }
+
+  return value;
+});
+
+const cache = new Redis();
+const tangerine = new Tangerine({
+  cache,
+  setCacheArgs(key, result) {
+    return ['PX', Math.round(result.ttl * 1000)];
+  }
+});
+
+(async () => {
+  console.time('without cache');
+  await tangerine.resolve('forwardemail.net'); // <-- cached
+  console.timeEnd('without cache');
+
+  console.time('with cache');
+  await tangerine.resolve('forwardemail.net'); // <-- uses cached value
+  console.timeEnd('with cache');
+})();
+```
+
+```sh
+❯ node app
+without cache: 98.25ms
+with cache: 0.091ms
+```
 
 
 ## Debugging
@@ -333,104 +393,26 @@ BENCHMARK_PROTOCOL="http" BENCHMARK_HOST="127.0.0.1" BENCHMARK_PORT="4000" BENCH
 
 ### Tangerine Benchmarks
 
-We have written extensive benchmarks to show that :tangerine: Tangerine has a <u>**faster `resolve()` and `reverse()`**</u> (and fast enough `lookup()`) versus the native Node.js DNS module.
+We have written extensive benchmarks to show that :tangerine: Tangerine is as fast as the native Node.js DNS module (with the exception of the `lookup` command).  Note that performance is opinionated – since rate limiting plays a factor dependent on the DNS servers you are using and since caching is most likely going to takeover.
 
-The initial release v1.0.0 had these benchmark results, which [you can publicly view on GitHub CI actions logs](https://github.com/forwardemail/tangerine/actions?query=event%3Apush):
+The latest benchmark results are viewable on GitHub under this repository's [GitHub CI actions logs](https://github.com/forwardemail/tangerine/actions?query=event%3Apush):
 
-> [Node 16 on ubuntu-latest](https://github.com/forwardemail/tangerine/actions/runs/4265467648/jobs/7424828382#step:6:1)
+> [Node 16 on ubuntu-latest](#TODO)
 
 ```sh
-> node benchmarks/lookup && node benchmarks/resolve && node benchmarks/reverse && node benchmarks/http
+> node benchmarks/lookup && node benchmarks/resolve && node benchmarks/reverse
 
-tangerine.lookup POST with caching using Cloudflare x 521 ops/sec ±186.87% (79 runs sampled)
-tangerine.lookup POST without caching using Cloudflare x 252 ops/sec ±1.52% (79 runs sampled)
-tangerine.lookup GET with caching using Cloudflare x 11,217 ops/sec ±1.75% (78 runs sampled)
-tangerine.lookup GET without caching using Cloudflare x 259 ops/sec ±1.28% (84 runs sampled)   <--------
-dns.promises.lookup with caching using Cloudflare x 206,286 ops/sec ±0.92% (82 runs sampled)
-dns.promises.lookup without caching using Cloudflare x 2,330 ops/sec ±1.86% (80 runs sampled)
-Fastest without caching is: dns.promises.lookup without caching using Cloudflare
-tangerine.resolve POST with caching using Cloudflare x 734 ops/sec ±190.07% (84 runs sampled)
-tangerine.resolve POST without caching using Cloudflare x 234 ops/sec ±3.75% (82 runs sampled)
-tangerine.resolve GET with caching using Cloudflare x 24,040 ops/sec ±1.93% (83 runs sampled)
-tangerine.resolve GET without caching using Cloudflare x 215 ops/sec ±16.62% (75 runs sampled)
-tangerine.resolve POST with caching using Google x 23,937 ops/sec ±2.04% (81 runs sampled)
-tangerine.resolve POST without caching using Google x 213 ops/sec ±9.51% (71 runs sampled)
-tangerine.resolve GET with caching using Google x 24,272 ops/sec ±1.74% (83 runs sampled)
-tangerine.resolve GET without caching using Google x 257 ops/sec ±4.02% (80 runs sampled)
-resolver.resolve with caching using Cloudflare x 158,842 ops/sec ±2.57% (84 runs sampled)
-resolver.resolve without caching using Cloudflare x 8.02 ops/sec ±191.78% (41 runs sampled)
-Fastest without caching is: tangerine.resolve GET without caching using Google                 <--------
-tangerine.reverse GET with caching x 694 ops/sec ±189.48% (76 runs sampled)
-tangerine.reverse GET without caching x 123 ops/sec ±90.74% (81 runs sampled)
-resolver.reverse x 0.24 ops/sec ±86.12% (10 runs sampled)
-dns.promises.reverse x 0.70 ops/sec ±164.50% (42 runs sampled)
-Fastest without caching is: tangerine.reverse GET without caching                              <--------
-http.request POST request x 384 ops/sec ±1.08% (84 runs sampled)
-http.request GET request x 398 ops/sec ±0.83% (83 runs sampled)
-undici GET request x 206 ops/sec ±5.59% (58 runs sampled)
-undici POST request x 211 ops/sec ±4.44% (74 runs sampled)
-axios GET request x 343 ops/sec ±1.97% (82 runs sampled)
-axios POST request x 350 ops/sec ±3.35% (82 runs sampled)
-got GET request x 325 ops/sec ±1.61% (81 runs sampled)
-got POST request x 341 ops/sec ±2.86% (84 runs sampled)
-fetch GET request x 657 ops/sec ±1.42% (82 runs sampled)
-fetch POST request x 680 ops/sec ±1.21% (84 runs sampled)
-request GET request x 370 ops/sec ±1.08% (85 runs sampled)
-request POST request x 370 ops/sec ±0.88% (84 runs sampled)
-superagent GET request x 380 ops/sec ±1.14% (83 runs sampled)
-superagent POST request x 386 ops/sec ±1.04% (83 runs sampled)
-phin GET request x 396 ops/sec ±0.86% (84 runs sampled)
-phin POST request x 398 ops/sec ±0.83% (85 runs sampled)
-Fastest is fetch POST request
+TODO
 ```
 
 > **NOTE**: HTTP library benchmark tests above are not based on real-world usage; instead they are using mock libraries such as `nock` and undici's `MockAgent`.  An actual HTTP server could be implemented in these benchmarks (pull request is welcome).  See [HTTP Library Benchmarks](#http-library-benchmarks) below for more insight into results with real-world servers.
 
-> [Node 18 on ubuntu latest](https://github.com/forwardemail/tangerine/actions/runs/4265467648/jobs/7424828575#step:6:1)
+> [Node 18 on ubuntu latest](#TODO)
 
 ```sh
 > node benchmarks/lookup && node benchmarks/resolve && node benchmarks/reverse && node benchmarks/http
 
-tangerine.lookup POST with caching using Cloudflare x 576 ops/sec ±188.97% (84 runs sampled)
-tangerine.lookup POST without caching using Cloudflare x 62.80 ops/sec ±0.34% (75 runs sampled)
-tangerine.lookup GET with caching using Cloudflare x 16,710 ops/sec ±0.27% (83 runs sampled)
-tangerine.lookup GET without caching using Cloudflare x 60.59 ops/sec ±6.15% (75 runs sampled)   <--------
-dns.promises.lookup with caching using Cloudflare x 251,300 ops/sec ±0.66% (89 runs sampled)
-dns.promises.lookup without caching using Cloudflare x 4,189 ops/sec ±0.65% (89 runs sampled)
-Fastest without caching is: dns.promises.lookup without caching using Cloudflare                 <--------
-tangerine.resolve POST with caching using Cloudflare x 627 ops/sec ±192.36% (90 runs sampled)
-tangerine.resolve POST without caching using Cloudflare x 59.66 ops/sec ±5.69% (74 runs sampled)
-tangerine.resolve GET with caching using Cloudflare x 33,813 ops/sec ±0.33% (90 runs sampled)
-tangerine.resolve GET without caching using Cloudflare x 60.16 ops/sec ±4.03% (73 runs sampled)
-tangerine.resolve POST with caching using Google x 1,184 ops/sec ±189.17% (90 runs sampled)
-tangerine.resolve POST without caching using Google x 41.23 ops/sec ±7.30% (70 runs sampled)
-tangerine.resolve GET with caching using Google x 33,811 ops/sec ±0.56% (91 runs sampled)
-tangerine.resolve GET without caching using Google x 54.34 ops/sec ±5.71% (69 runs sampled)
-resolver.resolve with caching using Cloudflare x 202,804 ops/sec ±0.39% (88 runs sampled)
-resolver.resolve without caching using Cloudflare x 61.93 ops/sec ±5.76% (76 runs sampled)
-Fastest without caching is: resolver.resolve without caching using Cloudflare                    <--------
-tangerine.reverse GET with caching x 594 ops/sec ±192.60% (86 runs sampled)
-tangerine.reverse GET without caching x 60.73 ops/sec ±3.06% (74 runs sampled)
-resolver.reverse x 66.00 ops/sec ±0.91% (78 runs sampled)
-dns.promises.reverse x 1.84 ops/sec ±190.54% (71 runs sampled)
-Fastest without caching is: tangerine.reverse GET without caching                                <--------
-http.request POST request x 438 ops/sec ±0.61% (86 runs sampled)
-http.request GET request x 442 ops/sec ±0.64% (87 runs sampled)
-undici GET request x 203 ops/sec ±3.67% (42 runs sampled)
-undici POST request x 194 ops/sec ±3.77% (62 runs sampled)
-axios GET request x 403 ops/sec ±1.67% (86 runs sampled)
-axios POST request x 414 ops/sec ±0.65% (88 runs sampled)
-got GET request x 391 ops/sec ±1.63% (85 runs sampled)
-got POST request x 403 ops/sec ±0.90% (85 runs sampled)
-fetch GET request x 794 ops/sec ±2.32% (84 runs sampled)
-fetch POST request x 821 ops/sec ±0.89% (86 runs sampled)
-request GET request x 423 ops/sec ±0.75% (86 runs sampled)
-request POST request x 426 ops/sec ±0.78% (86 runs sampled)
-superagent GET request x 435 ops/sec ±0.79% (87 runs sampled)
-superagent POST request x 437 ops/sec ±0.82% (88 runs sampled)
-phin GET request x 443 ops/sec ±0.64% (86 runs sampled)
-phin POST request x 445 ops/sec ±0.60% (86 runs sampled)
-Fastest is fetch POST request
+TODO
 ```
 
 > **NOTE**: HTTP library benchmark tests above are not based on real-world usage; instead they are using mock libraries such as `nock` and undici's `MockAgent`.  An actual HTTP server could be implemented in these benchmarks (pull request is welcome).  See [HTTP Library Benchmarks](#http-library-benchmarks) below for more insight into results with real-world servers.
@@ -443,84 +425,83 @@ You can also [run the benchmarks yourself](#benchmarks).
 
 Provided below are additional benchmark tests we have run:
 
-> Node v16.18.1 on MacBook Air M1 16GB (without VPN):
+> Node v18.14.2 on MacBook Air M1 16GB (without VPN):
 
-```sh
-❯ node --version
-v16.18.1
+```diff
+> node --version
+v18.14.2
 
-❯ node benchmarks/resolve
-tangerine POST with caching using Cloudflare x 1,044 ops/sec ±193.21% (90 runs sampled)
-tangerine POST without caching using Cloudflare x 40.93 ops/sec ±53.83% (50 runs sampled)
-tangerine GET with caching using Cloudflare x 73,896 ops/sec ±0.27% (90 runs sampled)
-tangerine GET without caching using Cloudflare x 38.66 ops/sec ±21.98% (55 runs sampled)
-tangerine POST with caching using Google x 992 ops/sec ±193.33% (87 runs sampled)
-tangerine POST without caching using Google x 31.98 ops/sec ±21.35% (58 runs sampled)
-tangerine GET with caching using Google x 74,410 ops/sec ±0.22% (91 runs sampled)
-tangerine GET without caching using Google x 41.52 ops/sec ±18.91% (56 runs sampled)
-dns.promises.resolve without caching using Cloudflare x 25.46 ops/sec ±100.19% (50 runs sampled)
-dns.promises.resolve with caching using Cloudflare x 505,956 ops/sec ±2.34% (89 runs sampled)
-Fastest without caching is: tangerine GET without caching using Google, tangerine GET without caching using Cloudflare
+> node benchmarks/lookup && node benchmarks/resolve && node benchmarks/reverse
+
+Started: lookup
+tangerine.lookup POST with caching using Cloudflare x 1,035 ops/sec ±195.73% (91 runs sampled)
+tangerine.lookup POST without caching using Cloudflare x 52.76 ops/sec ±51.29% (53 runs sampled)
+tangerine.lookup GET with caching using Cloudflare x 694,910 ops/sec ±1.54% (87 runs sampled)
++tangerine.lookup GET without caching using Cloudflare x 40.18 ops/sec ±60.19% (49 runs sampled)
+dns.promises.lookup with caching using Cloudflare x 12,645,103 ops/sec ±0.26% (90 runs sampled)
+-dns.promises.lookup without caching using Cloudflare x 2,664 ops/sec ±0.54% (88 runs sampled)
+Fastest without caching is: dns.promises.lookup without caching using Cloudflare
+
+Started: resolve
+tangerine.resolve POST with caching using Cloudflare x 1,005 ops/sec ±195.93% (91 runs sampled)
+tangerine.resolve POST without caching using Cloudflare x 55.52 ops/sec ±46.26% (57 runs sampled)
+tangerine.resolve GET with caching using Cloudflare x 2,879,865 ops/sec ±0.35% (86 runs sampled)
++tangerine.resolve GET without caching using Cloudflare x 71.11 ops/sec ±2.94% (74 runs sampled)
+tangerine.resolve POST with caching using Google x 1,292 ops/sec ±195.91% (88 runs sampled)
+tangerine.resolve POST without caching using Google x 36.88 ops/sec ±41.76% (53 runs sampled)
+tangerine.resolve GET with caching using Google x 2,885,428 ops/sec ±0.22% (88 runs sampled)
+tangerine.resolve GET without caching using Google x 70.38 ops/sec ±3.72% (68 runs sampled)
+resolver.resolve with caching using Cloudflare x 10,645,813 ops/sec ±0.23% (91 runs sampled)
+-resolver.resolve without caching using Cloudflare x 71.80 ops/sec ±2.84% (67 runs sampled)
+Fastest without caching is: resolver.resolve without caching using Cloudflare, tangerine.resolve GET without caching using Cloudflare, tangerine.resolve GET without caching using Google, tangerine.resolve POST without caching using Cloudflare
+
+Started: reverse
+tangerine.reverse GET with caching x 917 ops/sec ±195.78% (88 runs sampled)
++tangerine.reverse GET without caching x 51.15 ops/sec ±51.92% (61 runs sampled)
+resolver.reverse with caching x 11,058,579 ops/sec ±0.37% (88 runs sampled)
+-resolver.reverse without caching x 62.30 ops/sec ±24.83% (64 runs sampled)
+dns.promises.reverse with caching x 11,276,123 ops/sec ±0.17% (90 runs sampled)
+-dns.promises.reverse without caching x 73.46 ops/sec ±1.99% (69 runs sampled)
+Fastest without caching is: dns.promises.reverse without caching, resolver.reverse without caching
 ```
 
-> Node v16.18.1 on MacBook Air M1 16GB (with DNS blackholed VPN) – <mark>this highlights the DNS blackhole problem</mark>:
+> Node v18.14.2 on MacBook Air M1 16GB (with DNS blackholed VPN) – **this highlights the DNS blackhole problem**:
 
-```sh
-❯ node --version
-v16.18.1
+```diff
+> node --version
+v18.14.2
 
-❯ node benchmarks/resolve
-tangerine POST with caching using Cloudflare x 185 ops/sec ±195.50% (88 runs sampled)
-tangerine POST without caching using Cloudflare x 6.48 ops/sec ±35.98% (35 runs sampled)
-tangerine GET with caching using Cloudflare x 824 ops/sec ±193.77% (90 runs sampled)
-tangerine GET without caching using Cloudflare x 8.66 ops/sec ±8.22% (46 runs sampled)
-tangerine POST with caching using Google x 205 ops/sec ±195.45% (88 runs sampled)
-tangerine POST without caching using Google x 7.20 ops/sec ±12.28% (40 runs sampled)
-tangerine GET with caching using Google x 690 ops/sec ±194.12% (90 runs sampled)
-tangerine GET without caching using Google x 7.85 ops/sec ±9.53% (42 runs sampled)
-dns.promises.resolve without caching using Cloudflare x 0.09 ops/sec ±5.10% (5 runs sampled) <--------
-dns.promises.resolve with caching using Cloudflare x 0.09 ops/sec ±5.13% (5 runs sampled)    <--------
-Fastest without caching is: tangerine GET without caching using Cloudflare
-```
+> node benchmarks/lookup && node benchmarks/resolve && node benchmarks/reverse
 
-> Node v18.4.2 on MacBook Air M1 16GB (without VPN):
+Started: lookup
+tangerine.lookup POST with caching using Cloudflare x 1,327 ops/sec ±195.65% (89 runs sampled)
+tangerine.lookup POST without caching using Cloudflare x 71.11 ops/sec ±8.24% (71 runs sampled)
+tangerine.lookup GET with caching using Cloudflare x 759,816 ops/sec ±0.46% (90 runs sampled)
++tangerine.lookup GET without caching using Cloudflare x 73.98 ops/sec ±1.78% (69 runs sampled)
+dns.promises.lookup with caching using Cloudflare x 1,744 ops/sec ±195.97% (88 runs sampled)
+-dns.promises.lookup without caching using Cloudflare x 2,717 ops/sec ±0.82% (87 runs sampled)
+Fastest without caching is: dns.promises.lookup without caching using Cloudflare
 
-```sh
-❯ node --version
-v18.4.2
+Started: resolve
+tangerine.resolve POST with caching using Cloudflare x 947 ops/sec ±195.93% (91 runs sampled)
+tangerine.resolve POST without caching using Cloudflare x 44.33 ops/sec ±73.30% (75 runs sampled)
+tangerine.resolve GET with caching using Cloudflare x 2,814,737 ops/sec ±0.17% (91 runs sampled)
++tangerine.resolve GET without caching using Cloudflare x 57.25 ops/sec ±51.61% (73 runs sampled)
+tangerine.resolve POST with caching using Google x 1,087 ops/sec ±195.92% (91 runs sampled)
+tangerine.resolve POST without caching using Google x 36.84 ops/sec ±7.04% (62 runs sampled)
+tangerine.resolve GET with caching using Google x 2,784,199 ops/sec ±0.15% (92 runs sampled)
+tangerine.resolve GET without caching using Google x 47.55 ops/sec ±5.66% (76 runs sampled)
+resolver.resolve with caching using Cloudflare x 0.09 ops/sec ±6.41% (5 runs sampled)
+-resolver.resolve without caching using Cloudflare x 0.10 ops/sec ±6.52% (5 runs sampled)
+Fastest without caching is: tangerine.resolve GET without caching using Google
 
-❯ node benchmarks/resolve
-tangerine POST with caching using Cloudflare x 817 ops/sec ±193.86% (89 runs sampled)
-tangerine POST without caching using Cloudflare x 42.57 ops/sec ±38.18% (62 runs sampled)
-tangerine GET with caching using Cloudflare x 853 ops/sec ±193.79% (91 runs sampled)
-tangerine GET without caching using Cloudflare x 41.13 ops/sec ±57.37% (48 runs sampled)
-tangerine POST with caching using Google x 1,488 ops/sec ±192.10% (90 runs sampled)
-tangerine POST without caching using Google x 38.46 ops/sec ±12.08% (59 runs sampled)
-tangerine GET with caching using Google x 74,240 ops/sec ±0.31% (90 runs sampled)
-tangerine GET without caching using Google x 39.20 ops/sec ±23.52% (58 runs sampled)
-dns.promises.resolve without caching using Cloudflare x 59.11 ops/sec ±13.96% (63 runs sampled)
-dns.promises.resolve with caching using Cloudflare x 529,961 ops/sec ±0.33% (91 runs sampled)
-Fastest without caching is: dns.promises.resolve without caching using Cloudflare, tangerine GET without caching using Cloudflare
-```
-
-> Node v18.4.2 on MacBook Air M1 16GB (with DNS blackholed VPN) – <mark>this highlights the DNS blackhole problem</mark>:
-
-```sh
-❯ node --version
-v18.4.2
-
-❯ node benchmarks/resolve
-tangerine POST with caching using Cloudflare x 193 ops/sec ±195.49% (91 runs sampled)
-tangerine POST without caching using Cloudflare x 8.44 ops/sec ±9.34% (45 runs sampled)
-tangerine GET with caching using Cloudflare x 829 ops/sec ±193.83% (88 runs sampled)
-tangerine GET without caching using Cloudflare x 7.44 ops/sec ±24.67% (45 runs sampled)
-tangerine POST with caching using Google x 255 ops/sec ±195.33% (91 runs sampled)
-tangerine POST without caching using Google x 4.59 ops/sec ±77.88% (26 runs sampled)
-tangerine GET with caching using Google x 794 ops/sec ±193.95% (92 runs sampled)
-tangerine GET without caching using Google x 7.69 ops/sec ±11.23% (42 runs sampled)
-dns.promises.resolve without caching using Cloudflare x 0.09 ops/sec ±6.41% (5 runs sampled) <--------
-dns.promises.resolve with caching using Cloudflare x 0.09 ops/sec ±6.41% (5 runs sampled)    <--------
-Fastest without caching is: tangerine POST without caching using Cloudflare, tangerine GET without caching using Cloudflare
+Started: reverse
+tangerine.reverse GET with caching x 1,345 ops/sec ±195.66% (92 runs sampled)
++tangerine.reverse GET without caching x 71.73 ops/sec ±3.03% (73 runs sampled)
+resolver.reverse with caching x 0.10 ops/sec ±6.54% (5 runs sampled)
+-resolver.reverse without caching x 0.10 ops/sec ±0.01% (5 runs sampled)
+dns.promises.reverse with caching x 0.10 ops/sec ±6.54% (5 runs sampled)
+-dns.promises.reverse without caching x 0.10 ops/sec ±0.01% (5 runs sampled)
 ```
 
 Also see this [write-up](https://samknows.com/blog/dns-over-https-performance) on UDP-based DNS versus DNS over HTTPS ("DoH") benchmarks.
@@ -531,39 +512,13 @@ Also see this [write-up](https://samknows.com/blog/dns-over-https-performance) o
 
 Originally we wrote this library using [got](https://github.com/sindresorhus/got) – however after running benchmarks and learning of [how performant](https://github.com/sindresorhus/got/issues/1419) undici is, we weren't happy – and we rewrote it with [undici](https://github.com/nodejs/undici).  Here are test results from the latest versions of all HTTP libraries against our real-world API (both client and server running locally):
 
-> Node v16.18.1 on MacBook Air M1 16GB (using real-world API server):
-
-```sh
-❯ node --version
-v16.18.1
-
-❯ BENCHMARK_HOST="127.0.0.1" BENCHMARK_PORT="4000" BENCHMARK_PATH="/v1/test" node benchmarks/http
-http.request POST request x 860 ops/sec ±6.33% (75 runs sampled)
-http.request GET request x 978 ops/sec ±5.17% (83 runs sampled)
-undici GET request x 2,732 ops/sec ±4.14% (83 runs sampled)
-undici POST request x 1,204 ops/sec ±5.01% (81 runs sampled)
-axios GET request x 855 ops/sec ±5.45% (81 runs sampled)
-axios POST request x 723 ops/sec ±15.28% (71 runs sampled)
-got GET request x 1,355 ops/sec ±16.60% (63 runs sampled)
-got POST request x 93.65 ops/sec ±181.51% (29 runs sampled)
-fetch GET request x 949 ops/sec ±40.26% (45 runs sampled)
-fetch POST request x 672 ops/sec ±22.43% (67 runs sampled)
-request GET request x 960 ops/sec ±50.90% (48 runs sampled)
-request POST request x 612 ops/sec ±45.48% (57 runs sampled)
-superagent GET request x 126 ops/sec ±188.34% (29 runs sampled)
-superagent POST request x 747 ops/sec ±18.16% (67 runs sampled)
-phin GET request x 374 ops/sec ±147.42% (57 runs sampled)
-phin POST request x 566 ops/sec ±38.08% (51 runs sampled)
-Fastest is undici GET request
-```
-
 > Node v18.14.2 on MacBook Air M1 16GB (using real-world API server):
 
 ```sh
-❯ node --version
+> node --version
 v18.14.2
 
-❯ BENCHMARK_HOST="127.0.0.1" BENCHMARK_PORT="4000" BENCHMARK_PATH="/v1/test" node benchmarks/http
+> BENCHMARK_HOST="127.0.0.1" BENCHMARK_PORT="4000" BENCHMARK_PATH="/v1/test" node benchmarks/http
 http.request POST request x 765 ops/sec ±9.83% (72 runs sampled)
 http.request GET request x 1,000 ops/sec ±3.88% (85 runs sampled)
 undici GET request x 2,740 ops/sec ±5.92% (78 runs sampled)

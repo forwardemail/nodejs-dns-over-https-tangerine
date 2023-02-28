@@ -1,6 +1,6 @@
 {
   "name": "tangerine",
-  "description": "Tangerine is the best Node.js drop-in replacement for dns.promises.Resolver using DNS over HTTPS (\"DoH\") via undici with built-in retries, timeouts, smart server rotation, AbortControllers, and caching support for multiple backends via Keyv.",
+  "description": "Tangerine is the best Node.js drop-in replacement for dns.promises.Resolver using DNS over HTTPS (\"DoH\") via undici with built-in retries, timeouts, smart server rotation, AbortControllers, and caching support for multiple backends (with TTL support).",
   "version": "1.2.2",
   "author": "Forward Email (https://forwardemail.net)",
   "bugs": {
@@ -10,11 +10,11 @@
     "Forward Email (https://forwardemail.net)"
   ],
   "dependencies": {
+    "@ungap/structured-clone": "^1.0.2",
     "dns-packet": "^5.4.0",
     "dohdec": "^5.0.3",
     "get-stream": "6",
     "ipaddr.js": "^2.0.1",
-    "keyv": "^4.5.2",
     "merge-options": "3.0.4",
     "p-map": "4",
     "p-timeout": "4",
@@ -35,6 +35,8 @@
     "fixpack": "^4.0.0",
     "got": "11",
     "husky": "^8.0.3",
+    "ioredis": "^5.3.1",
+    "ioredis-mock": "^8.2.6",
     "lint-staged": "^13.1.2",
     "lodash": "^4.17.21",
     "nock": "^13.3.0",
@@ -150,7 +152,7 @@
   },
   "scripts": {
     "ava": "cross-env NODE_ENV=test ava",
-    "benchmarks": "node benchmarks/lookup && node benchmarks/resolve && node benchmarks/reverse && node benchmarks/http",
+    "benchmarks": "node benchmarks/lookup && node benchmarks/resolve && node benchmarks/reverse",
     "lint": "xo --fix && remark . -qfo && fixpack",
     "nyc": "cross-env NODE_ENV=test nyc ava",
     "prepare": "husky install",

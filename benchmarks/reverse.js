@@ -11,6 +11,24 @@ dns.setServers(['1.1.1.1', '1.0.0.1']);
 const resolver = new dns.promises.Resolver(opts);
 resolver.setServers(['1.1.1.1', '1.0.0.1']);
 
+const cache = new Map();
+
+async function resolverReverseWithCache(host) {
+  let result = cache.get(host);
+  if (result) return result;
+  result = await resolver.reverse(host);
+  if (result) cache.set(host, result);
+  return result;
+}
+
+async function dnsReverseWithCache(host) {
+  let result = cache.get(host);
+  if (result) return result;
+  result = await dns.promises.reverse(host);
+  if (result) cache.set(host, result);
+  return result;
+}
+
 const tangerine = new Tangerine({ ...opts, method: 'POST' });
 const tangerineNoCache = new Tangerine({
   ...opts,
@@ -19,6 +37,10 @@ const tangerineNoCache = new Tangerine({
 });
 
 const suite = new Benchmark.Suite('reverse');
+
+suite.on('start', function (ev) {
+  console.log(`Started: ${ev.currentTarget.name}`);
+});
 
 suite.add('tangerine.reverse GET with caching', {
   defer: true,
@@ -42,7 +64,18 @@ suite.add('tangerine.reverse GET without caching', {
   }
 });
 
-suite.add('resolver.reverse', {
+suite.add('resolver.reverse with caching', {
+  defer: true,
+  async fn(deferred) {
+    try {
+      await resolverReverseWithCache('1.1.1.1');
+    } catch {}
+
+    deferred.resolve();
+  }
+});
+
+suite.add('resolver.reverse without caching', {
   defer: true,
   async fn(deferred) {
     try {
@@ -53,7 +86,18 @@ suite.add('resolver.reverse', {
   }
 });
 
-suite.add('dns.promises.reverse', {
+suite.add('dns.promises.reverse with caching', {
+  defer: true,
+  async fn(deferred) {
+    try {
+      await dnsReverseWithCache('1.1.1.1');
+    } catch {}
+
+    deferred.resolve();
+  }
+});
+
+suite.add('dns.promises.reverse without caching', {
   defer: true,
   async fn(deferred) {
     try {
@@ -75,7 +119,7 @@ suite.on('complete', function () {
     )
       .filter('fastest')
       .map('name')
-      .join(', ')}`
+      .join(', ')}\n`
   );
 });
 

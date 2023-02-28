@@ -7,7 +7,6 @@ const { debuglog } = require('node:util');
 const { getEventListeners, setMaxListeners } = require('node:events');
 const { isIP, isIPv4, isIPv6 } = require('node:net');
 
-const Keyv = require('keyv');
 const getStream = require('get-stream');
 const ipaddr = require('ipaddr.js');
 const mergeOptions = require('merge-options');
@@ -16,6 +15,7 @@ const pTimeout = require('p-timeout');
 const pWaitFor = require('p-wait-for');
 const packet = require('dns-packet');
 const semver = require('semver');
+const structuredClone = require('@ungap/structured-clone').default;
 const { getService } = require('port-numbers');
 
 const pkg = require('./package.json');
@@ -287,8 +287,19 @@ class Tangerine extends dns.promises.Resolver {
         ipv6: '::0',
         ipv4Port: undefined,
         ipv6Port: undefined,
-        // cache mapping (e.g. txt -> keyv instance) - see below
+        // cache mapping (e.g. txt -> Map/keyv/redis instance) - see below
         cache: new Map(),
+        // <https://developers.cloudflare.com/dns/manage-dns-records/reference/ttl/>
+        defaultTTLSeconds: 300,
+        maxTTLSeconds: 86400,
+        // default is to support ioredis
+        // setCacheArgs(key, result) {
+        setCacheArgs() {
+          // also you have access to `result.expires` which is is ms since epoch
+          // (can be converted to Date via `new Date(result.expires)`)
+          // return ['PX', Math.round(result.ttl * 1000)];
+          return [];
+        },
         // whether to do 1:1 HTTP -> DNS error mapping
         returnHTTPErrors: false,
         // whether to smart rotate and bump-to-end servers that have issues
@@ -336,19 +347,6 @@ class Tangerine extends dns.promises.Resolver {
     // but note that this doesn't disable `got` dnsCache which is separate
     // so to turn that off, you need to supply `dnsCache: undefined` in `got` object (?)
     if (this.options.cache === true) this.options.cache = new Map();
-
-    if (this.options.cache instanceof Map) {
-      // each of the types have their own Keyv with prefix
-      for (const type of this.constructor.TYPES) {
-        if (!this.options.cache.get(type))
-          this.options.cache.set(
-            type,
-            new Keyv({
-              namespace: `dns:${type.toLowerCase()}`
-            })
-          );
-      }
-    }
 
     // convert `false` logger option into noop
     // <https://github.com/breejs/bree/issues/147>
@@ -1086,7 +1084,7 @@ class Tangerine extends dns.promises.Resolver {
     }
 
     //
-    // TODO: every address must be ipv4 or ipv6 (use `new URL` to parse and check)
+    // NOTE: every address must be ipv4 or ipv6 (use `new URL` to parse and check)
     // servers [ string ] - array of RFC 5952 formatted addresses
     //
 
@@ -1123,51 +1121,59 @@ class Tangerine extends dns.promises.Resolver {
       delete options.ecsSubnet;
     }
 
-    let cache;
-    if (this.options.cache instanceof Map)
-      cache = this.options.cache.get(rrtype);
-
-    const key = ecsSubnet ? `${ecsSubnet}:${name}` : name;
+    const key = (
+      ecsSubnet ? `${rrtype}:${ecsSubnet}:${name}` : `${rrtype}:${name}`
+    ).toLowerCase();
 
     let result;
     let data;
-    if (cache) {
+    if (this.options.cache) {
       //
-      // <https://github.com/jaredwray/keyv/issues/106>
-      //
-      // NOTE: we store `result.lowest_answer_ttl` which was the lowest TTL determined
+      // NOTE: we store `result.ttl` which was the lowest TTL determined
       //       (this saves us from duplicating the same `...sort().filter(Number.isFinite)` logic)
       //
-      data = await cache.get(key, { raw: true });
-      if (data?.value) {
-        result = data.value;
+      data = await this.options.cache.get(key);
+      // safeguard in case cache pollution
+      if (data && typeof data === 'object') {
+        debug('cache retrieved', data);
         const now = Date.now();
+        // safeguard in case cache pollution
         if (
-          // safeguard in case catch gets polluted
-          Number.isFinite(result.lowest_answer_ttl) &&
-          result.lowest_answer_ttl > 0 &&
-          data.expires &&
-          now <= data.expires
+          !Number.isFinite(data.expires) ||
+          data.expires < now ||
+          !Number.isFinite(data.ttl) ||
+          data.ttl < 1
         ) {
+          data = undefined;
+        } else if (options?.ttl) {
+          // clone the data so that we don't mutate cache (e.g. if it's in-memory)
+          // <https://nodejs.org/api/globals.html#structuredclonevalue-options>
+          // <https://github.com/ungap/structured-clone>
+          data = structuredClone(data);
+
           // returns ms -> s conversion
           const ttl = Math.round((data.expires - now) / 1000);
-          const diff = result.lowest_answer_ttl - ttl;
+          const diff = data.ttl - ttl;
 
-          for (let i = 0; i < result.answers.length; i++) {
+          for (let i = 0; i < data.answers.length; i++) {
             // eslint-disable-next-line max-depth
-            if (typeof result.answers[i].ttl === 'number') {
+            if (typeof data.answers[i].ttl === 'number') {
               // subtract ttl from answer
-              result.answers[i].ttl = Math.round(result.answers[i].ttl - diff);
+              data.answers[i].ttl = Math.round(data.answers[i].ttl - diff);
 
               // eslint-disable-next-line max-depth
-              if (result.answers[i].ttl <= 0) {
-                result = undefined;
+              if (data.answers[i].ttl <= 0) {
                 data = undefined;
                 break;
               }
             }
           }
         }
+
+        // will only use cache if it's still set after parsing ttl
+        result = data;
+      } else {
+        data = undefined;
       }
     }
 
@@ -1200,8 +1206,8 @@ class Tangerine extends dns.promises.Resolver {
     // - The DoH service could not contact Google Public DNS resolvers.
     // - In the case of a 502 response, although retrying on an alternate Google Public DNS address might help, a more effective fallback response would be to try another DoH service, or to switch to traditional UDP or TCP DNS at 8.8.8.8.
     //
-    if (cache && result) {
-      debug(`cached result found for "${cache.opts.namespace}:${key}"`);
+    if (this.options.cache && result) {
+      debug(`cached result found for "${key}"`);
     } else {
       if (!abortController) {
         abortController = new AbortController();
@@ -1241,31 +1247,37 @@ class Tangerine extends dns.promises.Resolver {
     //
     switch (result.rcode) {
       case 'NOERROR': {
-        //
-        // NOTE: if the answer was truncated then unset results (?)
-        // <https://github.com/EduardoRuizM/native-dnssec-dns/blob/fc27face6c64ab53675840bafc81f70bab48a743/lib/client.js#L354>
-        // <https://github.com/hildjj/dohdec/issues/40>
-        // if (result.flag_tc) throw createError(name, rrtype, dns.BADRESP);
+        // <https://github.com/hildjj/dohdec/issues/40#issuecomment-1445554626>
         if (result.flag_tc) {
-          this.options.logger.error(new Error('Truncated DNS response'), {
-            name,
-            rrtype,
-            result
-          });
-        } else if (cache && !data?.value) {
+          this.options.logger.error(
+            new Error(
+              'Truncated DNS response; Defer to https://github.com/hildjj/dohdec/issues/40#issuecomment-1445554626 for insight.'
+            ),
+            {
+              name,
+              rrtype,
+              result
+            }
+          );
+        } else if (this.options.cache && !data) {
           // store in cache based off lowest ttl
-          const ttl = result.answers
+          let ttl = result.answers
             .map((answer) => answer.ttl)
             .sort()
             .find((ttl) => Number.isFinite(ttl));
-          result.lowest_answer_ttl = ttl;
-          await (result.lowest_answer_ttl && result.lowest_answer_ttl > 0
-            ? cache.set(
-                key,
-                result,
-                Math.round(result.lowest_answer_ttl * 1000)
-              )
-            : cache.set(key, result));
+          // if TTL is not a number or is < 1 or is > max then set to default
+          if (
+            !Number.isFinite(ttl) ||
+            ttl < 1 ||
+            ttl > this.options.maxTTLSeconds
+          )
+            ttl = this.options.defaultTTLSeconds;
+          result.ttl = ttl;
+          // this supports both redis-based key/value/ttl and simple key/value implementations
+          result.expires = Date.now() + Math.round(result.ttl * 1000);
+          const args = [key, result, ...this.options.setCacheArgs(key, result)];
+          debug('setting cache', [key, result, ...args]);
+          await this.options.cache.set(...args);
         }
 
         break;

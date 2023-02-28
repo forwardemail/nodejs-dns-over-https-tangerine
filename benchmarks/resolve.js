@@ -1,6 +1,5 @@
 const dns = require('node:dns');
 
-const Keyv = require('keyv');
 const Benchmark = require('benchmark');
 
 const Tangerine = require('..');
@@ -12,14 +11,14 @@ dns.setServers(['1.1.1.1', '1.0.0.1']);
 const resolver = new dns.promises.Resolver(opts);
 resolver.setServers(['1.1.1.1', '1.0.0.1']);
 
-const cache = new Keyv();
+const cache = new Map();
 
 async function resolveWithCache(host, record) {
   const key = `${host}:${record}`;
-  let result = await cache.get(key);
+  let result = cache.get(key);
   if (result) return result;
   result = await resolver.resolve(host, record);
-  if (result) await cache.set(key, result);
+  if (result) cache.set(key, result);
   return result;
 }
 
@@ -55,6 +54,10 @@ const record = 'A';
 // ---
 
 const suite = new Benchmark.Suite('resolve');
+
+suite.on('start', function (ev) {
+  console.log(`Started: ${ev.currentTarget.name}`);
+});
 
 // Cloudflare
 suite.add('tangerine.resolve POST with caching using Cloudflare', {
@@ -155,7 +158,7 @@ suite.on('complete', function () {
     )
       .filter('fastest')
       .map('name')
-      .join(', ')}`
+      .join(', ')}\n`
   );
 });
 

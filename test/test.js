@@ -1,6 +1,7 @@
 const dns = require('node:dns');
 const { isIPv4, isIPv6 } = require('node:net');
 
+const Redis = require('ioredis-mock');
 const _ = require('lodash');
 const got = require('got');
 const sortKeys = require('sort-keys');
@@ -228,7 +229,7 @@ for (const host of [
   'microsoft.com'
 ]) {
   //
-  // TODO: need to test all options
+  // NOTE: need to test all options
   //
   // tangerine.lookup"${host}"[, options])
   test(`lookup("${host}")`, async (t) => {
@@ -644,4 +645,69 @@ test('supports got HTTP library', async (t) => {
   if (!_.isError(r1)) r1 = r1.every((o) => isIPv4(o) || isIPv6(o));
   if (!_.isError(r2)) r2 = r2.every((o) => isIPv4(o) || isIPv6(o));
   t.deepEqual(r1, r2);
+});
+
+test('creates default cache', (t) => {
+  const tangerine = new Tangerine();
+  t.true(tangerine.options.cache instanceof Map);
+});
+
+test('default cache supports ttl', async (t) => {
+  const tangerine = new Tangerine();
+  const a = await tangerine.resolve('forwardemail.net');
+  const b = await tangerine.options.cache.get('a:forwardemail.net');
+  t.log(b);
+  compareResults(
+    t,
+    'A',
+    a,
+    b.answers.map((a) => a.data)
+  );
+});
+
+test('supports redis cache', async (t) => {
+  const cache = new Redis();
+
+  // <https://github.com/luin/ioredis/issues/1179>
+  Redis.Command.setArgumentTransformer('set', (args) => {
+    if (typeof args[1] === 'object') args[1] = JSON.stringify(args[1]);
+    return args;
+  });
+
+  Redis.Command.setReplyTransformer('get', (value) => {
+    if (value && typeof value === 'string') {
+      try {
+        value = JSON.parse(value);
+      } catch {}
+    }
+
+    return value;
+  });
+
+  const tangerine = new Tangerine({
+    cache,
+    setCacheArgs(key, result) {
+      return ['PX', Math.round(result.ttl * 1000)];
+    }
+  });
+
+  t.true(tangerine.options.cache instanceof Redis);
+
+  const a = await tangerine.resolve('forwardemail.net');
+  const b = await tangerine.options.cache.get('a:forwardemail.net');
+  const c = await cache.get('a:forwardemail.net');
+
+  compareResults(
+    t,
+    'A',
+    a,
+    b.answers.map((a) => a.data)
+  );
+
+  compareResults(
+    t,
+    'A',
+    b.answers.map((a) => a.data),
+    c.answers.map((a) => a.data)
+  );
 });
