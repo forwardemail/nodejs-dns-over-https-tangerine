@@ -400,7 +400,7 @@ The latest benchmark results are viewable on GitHub under this repository's [Git
 > [Node 16 on ubuntu-latest](https://github.com/forwardemail/tangerine/actions/runs/4297805550/jobs/7491228635#step:6:1)
 
 ```diff
-> node benchmarks/lookup && node benchmarks/resolve && node benchmarks/reverse
+node benchmarks/lookup && node benchmarks/resolve && node benchmarks/reverse
 
 Started: lookup
 tangerine.lookup POST with caching using Cloudflare x 735 ops/sec ±195.35% (88 runs sampled)
@@ -437,7 +437,7 @@ dns.promises.reverse with caching x 5,123,900 ops/sec ±0.96% (85 runs sampled)
 > [Node 18 on ubuntu latest](https://github.com/forwardemail/tangerine/actions/runs/4297805550/jobs/7491228742#step:6:1)
 
 ```diff
-> node benchmarks/lookup && node benchmarks/resolve && node benchmarks/reverse && node benchmarks/http
+node benchmarks/lookup && node benchmarks/resolve && node benchmarks/reverse && node benchmarks/http
 
 Started: lookup
 tangerine.lookup POST with caching using Cloudflare x 666 ops/sec ±195.48% (87 runs sampled)
@@ -482,10 +482,10 @@ Provided below are additional benchmark tests we have run:
 > Node v18.14.2 on MacBook Air M1 16GB (without VPN):
 
 ```diff
-> node --version
+node --version
 v18.14.2
 
-> node benchmarks/lookup && node benchmarks/resolve && node benchmarks/reverse
+node benchmarks/lookup && node benchmarks/resolve && node benchmarks/reverse
 
 Started: lookup
 tangerine.lookup POST with caching using Cloudflare x 1,035 ops/sec ±195.73% (91 runs sampled)
@@ -522,10 +522,10 @@ Fastest without caching is: dns.promises.reverse without caching, resolver.rever
 > Node v18.14.2 on MacBook Air M1 16GB (with DNS blackholed VPN) – **this highlights the DNS blackhole problem**:
 
 ```diff
-> node --version
+node --version
 v18.14.2
 
-> node benchmarks/lookup && node benchmarks/resolve && node benchmarks/reverse
+node benchmarks/lookup && node benchmarks/resolve && node benchmarks/reverse
 
 Started: lookup
 tangerine.lookup POST with caching using Cloudflare x 1,327 ops/sec ±195.65% (89 runs sampled)
@@ -570,7 +570,7 @@ Originally we wrote this library using [got](https://github.com/sindresorhus/got
 > Node v18.14.2 on MacBook Air M1 16GB (using real-world API server):
 
 ```sh
-> node --version
+node --version
 v18.14.2
 
 > BENCHMARK_HOST="127.0.0.1" BENCHMARK_PORT="4000" BENCHMARK_PATH="/v1/test" node benchmarks/http
