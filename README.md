@@ -385,10 +385,10 @@ npm install
 npm run benchmarks
 ```
 
-You can also specify optional custom environment variables to test against real-world or locally running servers (instead of using mocked in-memory servers):
+You can also specify optional custom environment variables to test against real-world or locally running servers (instead of using mocked in-memory servers) for the [HTTP Library Benchmarks](#http-library-benchmarks):
 
 ```sh
-BENCHMARK_PROTOCOL="http" BENCHMARK_HOST="127.0.0.1" BENCHMARK_PORT="4000" BENCHMARK_PATH="/v1/test" npm run benchmarks
+BENCHMARK_PROTOCOL="http" BENCHMARK_HOST="127.0.0.1" BENCHMARK_PORT="4000" BENCHMARK_PATH="/v1/test" node benchmarks/http
 ```
 
 ### Tangerine Benchmarks
