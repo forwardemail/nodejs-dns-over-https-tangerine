@@ -231,8 +231,8 @@ for (const host of [
   test(`setDefaultResultOrder with ${host}`, async (t) => {
     const tangerine = new Tangerine({ cache: false });
     for (const dnsOrder of ['verbatim', 'ipv4first']) {
-      // set it opposite to the version
       tangerine.setDefaultResultOrder(dnsOrder);
+      dns.promises.setDefaultResultOrder(dnsOrder);
       for (let i = 0; i < 5; i++) {
         // eslint-disable-next-line no-await-in-loop
         const [results, dnsResults] = await Promise.all([
