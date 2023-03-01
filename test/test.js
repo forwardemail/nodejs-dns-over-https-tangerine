@@ -236,8 +236,16 @@ for (const host of [
       for (let i = 0; i < 5; i++) {
         // eslint-disable-next-line no-await-in-loop
         const [results, dnsResults] = await Promise.all([
-          tangerine.lookup(host, { all: true }),
-          dns.promises.lookup(host, { all: true })
+          tangerine.lookup(host, {
+            all: true,
+            // TODO: there is an issue w/tests and `verbatim` shouldn't be needed
+            verbatim: dnsOrder === 'verbatim'
+          }),
+          dns.promises.lookup(host, {
+            all: true,
+            // TODO: there is an issue w/tests and `verbatim` shouldn't be needed
+            verbatim: dnsOrder === 'verbatim'
+          })
         ]);
         // since IP's can vary based off round-robin DNS or geo DNS
         // we simply return the sorted results based off IPv4 or IPv6 sort
