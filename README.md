@@ -11,7 +11,7 @@
 </div>
 <br />
 <div align="center">
-  🍊 <a href="https://github.com/forwardemail/tangerine" target="_blank">Tangerine</a> is the best <a href="https://nodejs.org" target="_blank">Node.js</a> drop-in replacement for <a href="https://nodejs.org/api/dns.html#resolveroptions" target="_blank">dns.promises.Resolver</a> using <a href="https://en.wikipedia.org/wiki/DNS_over_HTTPS" target="_blank">DNS over HTTPS</a> ("DoH") via <a href="https://github.com/nodejs/undici" target="_blank">undici</a> with built-in retries, timeouts, smart server rotation, <a href="https://developer.mozilla.org/en-US/docs/Web/API/AbortController" target="_blank">AbortControllers</a>, and caching support for multiple backends (with TTL support).
+  🍊 <a href="https://github.com/forwardemail/tangerine" target="_blank">Tangerine</a> is the best <a href="https://nodejs.org" target="_blank">Node.js</a> drop-in replacement for <a href="https://nodejs.org/api/dns.html#resolveroptions" target="_blank">dns.promises.Resolver</a> using <a href="https://en.wikipedia.org/wiki/DNS_over_HTTPS" target="_blank">DNS over HTTPS</a> ("DoH") via <a href="https://github.com/nodejs/undici" target="_blank">undici</a> with built-in retries, timeouts, smart server rotation, <a href="https://developer.mozilla.org/en-US/docs/Web/API/AbortController" target="_blank">AbortControllers</a>, and caching support for multiple backends (with TTL and purge support).
 </div>
 <hr />
 <div align="center">
@@ -37,21 +37,21 @@
   * [`tangerine.cancel()`](#tangerinecancel)
   * [`tangerine.getServers()`](#tangerinegetservers)
   * [`tangerine.lookup(hostname[, options])`](#tangerinelookuphostname-options)
-  * [`tangerine.lookupService(address, port, abortController)`](#tangerinelookupserviceaddress-port-abortcontroller)
+  * [`tangerine.lookupService(address, port[, abortController, purgeCache])`](#tangerinelookupserviceaddress-port-abortcontroller-purgecache)
   * [`tangerine.resolve(hostname[, rrtype, options, abortController])`](#tangerineresolvehostname-rrtype-options-abortcontroller)
   * [`tangerine.resolve4(hostname[, options, abortController])`](#tangerineresolve4hostname-options-abortcontroller)
   * [`tangerine.resolve6(hostname[, options, abortController])`](#tangerineresolve6hostname-options-abortcontroller)
-  * [`tangerine.resolveAny(hostname[, abortController])`](#tangerineresolveanyhostname-abortcontroller)
-  * [`tangerine.resolveCaa(hostname[, abortController]))`](#tangerineresolvecaahostname-abortcontroller)
-  * [`tangerine.resolveCname(hostname[, abortController]))`](#tangerineresolvecnamehostname-abortcontroller)
-  * [`tangerine.resolveMx(hostname[, abortController]))`](#tangerineresolvemxhostname-abortcontroller)
-  * [`tangerine.resolveNaptr(hostname[, abortController]))`](#tangerineresolvenaptrhostname-abortcontroller)
-  * [`tangerine.resolveNs(hostname[, abortController]))`](#tangerineresolvenshostname-abortcontroller)
-  * [`tangerine.resolvePtr(hostname[, abortController]))`](#tangerineresolveptrhostname-abortcontroller)
-  * [`tangerine.resolveSoa(hostname[, abortController]))`](#tangerineresolvesoahostname-abortcontroller)
-  * [`tangerine.resolveSrv(hostname[, abortController]))`](#tangerineresolvesrvhostname-abortcontroller)
-  * [`tangerine.resolveTxt(hostname[, abortController]))`](#tangerineresolvetxthostname-abortcontroller)
-  * [`tangerine.reverse(ip[, abortController])`](#tangerinereverseip-abortcontroller)
+  * [`tangerine.resolveAny(hostname[, options, abortController])`](#tangerineresolveanyhostname-options-abortcontroller)
+  * [`tangerine.resolveCaa(hostname[, options, abortController]))`](#tangerineresolvecaahostname-options-abortcontroller)
+  * [`tangerine.resolveCname(hostname[, options, abortController]))`](#tangerineresolvecnamehostname-options-abortcontroller)
+  * [`tangerine.resolveMx(hostname[, options, abortController]))`](#tangerineresolvemxhostname-options-abortcontroller)
+  * [`tangerine.resolveNaptr(hostname[, options, abortController]))`](#tangerineresolvenaptrhostname-options-abortcontroller)
+  * [`tangerine.resolveNs(hostname[, options, abortController]))`](#tangerineresolvenshostname-options-abortcontroller)
+  * [`tangerine.resolvePtr(hostname[, options, abortController]))`](#tangerineresolveptrhostname-options-abortcontroller)
+  * [`tangerine.resolveSoa(hostname[, options, abortController]))`](#tangerineresolvesoahostname-options-abortcontroller)
+  * [`tangerine.resolveSrv(hostname[, options, abortController]))`](#tangerineresolvesrvhostname-options-abortcontroller)
+  * [`tangerine.resolveTxt(hostname[, options, abortController]))`](#tangerineresolvetxthostname-options-abortcontroller)
+  * [`tangerine.reverse(ip[, abortController, purgeCache])`](#tangerinereverseip-abortcontroller-purgecache)
   * [`tangerine.setDefaultResultOrder(order)`](#tangerinesetdefaultresultorderorder)
   * [`tangerine.setServers(servers)`](#tangerinesetserversservers)
 * [Options](#options)
@@ -97,7 +97,7 @@ Our team at [Forward Email](https://forwardemail.net) (100% open-source and priv
     * Once popular packages such as [native-dns](https://github.com/tjfontaine/node-dns/issues/111) and [dnscached](https://github.com/yahoo/dnscache/issues/28) are archived or deprecated.
     * [Other packages](https://www.npmjs.com/search?q=dns%20cache) only provide `lookup` functions, have a limited sub-set of methods such as [@zeit/dns-cached-resolver](https://github.com/vercel/dns-cached-resolve), or are unmaintained.
   * Act as a 1:1 drop-in replacement for `dns.promises.Resolver` with DNS over HTTPS ("DoH").
-  * Support caching for multiple backends (with TTL support), retries, smart server rotation, and [AbortController](https://developer.mozilla.org/en-US/docs/Web/API/AbortController) usage.
+  * Support caching for multiple backends (with TTL and purge support), retries, smart server rotation, and [AbortController](https://developer.mozilla.org/en-US/docs/Web/API/AbortController) usage.
   * Provide out of the box support for both ECMAScript modules (ESM) **and** CommonJS (CJS) (see discussions [for](https://gist.github.com/sindresorhus/a39789f98801d908bbc7ff3ecc99d99c) and [against](https://gist.github.com/joepie91/bca2fda868c1e8b2c2caf76af7dfcad3)).
 * The native Node.js `dns` module does not support caching out of the box – which is a [highly requested feature](https://github.com/nodejs/node/issues/5893) (but belongs in userland).
 * Writing tests against DNS-related infrastructure requires either hacky DNS mocking or a DNS server (manipulating cache is much easier).
@@ -225,8 +225,11 @@ tangerine.resolve('forwardemail.net').then(console.log);
   * Specify default request options based off the library under `requestOptions` below
 * Instance methods of [dns.promises.Resolver](https://nodejs.org/api/dns.html) are mirrored to :tangerine: Tangerine.
 * Resolver methods accept an optional `abortController` argument, which is an instance of [AbortController](https://developer.mozilla.org/en-US/docs/Web/API/AbortController).  Note that :tangerine: Tangerine manages `AbortController` usage internally – so you most likely won't need to pass your own (see [index.js](https://github.com/forwardemail/tangerine/blob/main/index.js) for more insight).
-* See the complete list of [Options](#options) below.
+* Resolver methods that accept `options` argument also accept an optional `options.purgeCache` option.
+* Resolver methods support a `purgeCache` option as either `options.purgeCache` (Boolean) via `options` argument or `purgeCache` (Boolean) argument – see [API](#api) and [Cache](#cache) for more insight.
+  * If set to `true`, then the result will be re-queried and re-cached – see [Cache](#cache) documentation for more insight.
 * Instances of `new Tangerine()` are instances of `dns.promises.Resolver` via `class Tangerine extends dns.promises.Resolver { ... }` (namely for compatibility with projects such as [cacheable-lookup](https://github.com/szmarczak/cacheable-lookup)).
+* See the complete list of [Options](#options) below.
 
 ### `tangerine.cancel()`
 
@@ -234,7 +237,7 @@ tangerine.resolve('forwardemail.net').then(console.log);
 
 ### `tangerine.lookup(hostname[, options])`
 
-### `tangerine.lookupService(address, port, abortController)`
+### `tangerine.lookupService(address, port[, abortController, purgeCache])`
 
 ### `tangerine.resolve(hostname[, rrtype, options, abortController])`
 
@@ -246,27 +249,27 @@ Tangerine supports a new `ecsSubnet` property in the `options` Object argument.
 
 Tangerine supports a new `ecsSubnet` property in the `options` Object argument.
 
-### `tangerine.resolveAny(hostname[, abortController])`
+### `tangerine.resolveAny(hostname[, options, abortController])`
 
-### `tangerine.resolveCaa(hostname[, abortController]))`
+### `tangerine.resolveCaa(hostname[, options, abortController]))`
 
-### `tangerine.resolveCname(hostname[, abortController]))`
+### `tangerine.resolveCname(hostname[, options, abortController]))`
 
-### `tangerine.resolveMx(hostname[, abortController]))`
+### `tangerine.resolveMx(hostname[, options, abortController]))`
 
-### `tangerine.resolveNaptr(hostname[, abortController]))`
+### `tangerine.resolveNaptr(hostname[, options, abortController]))`
 
-### `tangerine.resolveNs(hostname[, abortController]))`
+### `tangerine.resolveNs(hostname[, options, abortController]))`
 
-### `tangerine.resolvePtr(hostname[, abortController]))`
+### `tangerine.resolvePtr(hostname[, options, abortController]))`
 
-### `tangerine.resolveSoa(hostname[, abortController]))`
+### `tangerine.resolveSoa(hostname[, options, abortController]))`
 
-### `tangerine.resolveSrv(hostname[, abortController]))`
+### `tangerine.resolveSrv(hostname[, options, abortController]))`
 
-### `tangerine.resolveTxt(hostname[, abortController]))`
+### `tangerine.resolveTxt(hostname[, options, abortController]))`
 
-### `tangerine.reverse(ip[, abortController])`
+### `tangerine.reverse(ip[, abortController, purgeCache])`
 
 ### `tangerine.setDefaultResultOrder(order)`
 
@@ -357,6 +360,19 @@ const tangerine = new Tangerine({
 without cache: 98.25ms
 with cache: 0.091ms
 ```
+
+You can also force the cache to be purged and reset to a new value:
+
+```js
+await tangerine.resolve('forwardemail.net'); // cached
+await tangerine.resolve('forwardemail.net'); // uses cached value
+await tangerine.resolve('forwardemail.net'); // uses cached value
+await tangerine.resolve('forwardemail.net', { purgeCache: true }); // re-cached
+await tangerine.resolve('forwardemail.net'); // uses cached value
+await tangerine.resolve('forwardemail.net'); // uses cached value
+```
+
+This purge cache feature is useful for DNS records that have recently changed and have had their caches purged at the relevant DNS provider (e.g. [Cloudflare's Purge Cache tool](https://1.1.1.1/purge-cache/)).
 
 
 ## Debugging

@@ -1,6 +1,6 @@
 {
   "name": "tangerine",
-  "description": "Tangerine is the best Node.js drop-in replacement for dns.promises.Resolver using DNS over HTTPS (\"DoH\") via undici with built-in retries, timeouts, smart server rotation, AbortControllers, and caching support for multiple backends (with TTL support).",
+  "description": "Tangerine is the best Node.js drop-in replacement for dns.promises.Resolver using DNS over HTTPS (\"DoH\") via undici with built-in retries, timeouts, smart server rotation, AbortControllers, and caching support for multiple backends (with TTL and purge support).",
   "version": "1.3.1",
   "author": "Forward Email (https://forwardemail.net)",
   "bugs": {
@@ -20,6 +20,7 @@
     "p-timeout": "4",
     "p-wait-for": "3",
     "port-numbers": "^6.0.1",
+    "punycode": "^2.3.0",
     "semver": "^7.3.8"
   },
   "devDependencies": {

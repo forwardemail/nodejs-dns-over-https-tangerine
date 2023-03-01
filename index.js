@@ -7,6 +7,7 @@ const { debuglog } = require('node:util');
 const { getEventListeners, setMaxListeners } = require('node:events');
 const { isIP, isIPv4, isIPv6 } = require('node:net');
 
+const { toASCII } = require('punycode/');
 const getStream = require('get-stream');
 const ipaddr = require('ipaddr.js');
 const mergeOptions = require('merge-options');
@@ -464,7 +465,7 @@ class Tangerine extends dns.promises.Resolver {
 
       options = { family: options };
     } else if (
-      typeof options.family !== 'undefined' &&
+      typeof options?.family !== 'undefined' &&
       ![0, 4, 6, 'IPv4', 'IPv6'].includes(options.family)
     ) {
       // validate family
@@ -475,12 +476,12 @@ class Tangerine extends dns.promises.Resolver {
       throw err;
     }
 
-    if (options.family === 'IPv4') options.family = 4;
-    else if (options.family === 'IPv6') options.family = 6;
+    if (options?.family === 'IPv4') options.family = 4;
+    else if (options?.family === 'IPv6') options.family = 6;
 
     // validate hints
     // eslint-disable-next-line no-bitwise
-    if ((options.hints & ~(dns.ADDRCONFIG | dns.ALL | dns.V4MAPPED)) !== 0) {
+    if ((options?.hints & ~(dns.ADDRCONFIG | dns.ALL | dns.V4MAPPED)) !== 0) {
       const err = new TypeError(
         `The argument 'hints' is invalid. Received ${options.hints}`
       );
@@ -488,16 +489,55 @@ class Tangerine extends dns.promises.Resolver {
       throw err;
     }
 
-    // resolve the first A or AAAA record
+    // purge cache support
+    let purgeCache;
+    if (options?.purgeCache) {
+      purgeCache = true;
+      delete options.purgeCache;
+    }
+
+    if (options.hints) {
+      switch (options.hints) {
+        case dns.ADDRCONFIG: {
+          options.family = this.constructor.getAddrConfigTypes();
+          break;
+        }
+
+        // eslint-disable-next-line no-bitwise
+        case dns.ADDRCONFIG | dns.V4MAPPED: {
+          options.family = this.constructor.getAddrConfigTypes();
+          break;
+        }
+
+        // eslint-disable-next-line no-bitwise
+        case dns.ADDRCONFIG | dns.V4MAPPED | dns.ALL: {
+          options.family = this.constructor.getAddrConfigTypes();
+
+          break;
+        }
+
+        default: {
+          break;
+        }
+      }
+    }
+
+    // resolve the first A or AAAA record (conditionally)
     let answers = [];
 
     try {
-      answers = await Promise.any([
-        this.resolve4(name),
-        // the only downside here is that if one succeeds the other won't be aborted
-        // (an alternative approach could be implemented, but would have to wrap around ENOTFOUND err
-        this.resolve6(name)
+      // `any` or `all` is based off !options.family || options.family === 0
+      // (according to official nodejs dns.lookup docs)
+      answers = await Promise[
+        typeof options.family === 'undefined' || options.family === 0
+          ? 'all'
+          : 'any'
+      ]([
+        // the only downside here is that if one succeeds the other won't be aborted (iff "any")
+        this.resolve4(name, { purgeCache, noThrowOnNODATA: true }),
+        this.resolve6(name, { purgeCache, noThrowOnNODATA: true })
       ]);
+      answers = answers.flat();
     } catch (_err) {
       debug(_err);
 
@@ -522,9 +562,18 @@ class Tangerine extends dns.promises.Resolver {
       throw err;
     }
 
+    // if no results then throw ENODATA
+    if (answers.length === 0) {
+      const err = this.constructor.createError(name, '', dns.NODATA);
+      // remap and perform syscall
+      err.syscall = 'getaddrinfo';
+      // err.errno = -3008;
+      throw err;
+    }
+
     // respect options from dns module
     // <https://nodejs.org/api/dns.html#dnspromiseslookuphostname-options>
-    // - [x]: `family` (4, 6, or 0, default is 0)
+    // - [x] `family` (4, 6, or 0, default is 0)
     // - [x] `hints` multiple flags may be passed by bitwise OR'ing values
     // - [x] `all` (iff true, then return all results, otherwise single result)
     // - [x] `verbatim` - if `true` then return as-is, otherwise use dns order
@@ -541,14 +590,8 @@ class Tangerine extends dns.promises.Resolver {
     // dns.ALL:
     //   If dns.V4MAPPED is specified, return resolved IPv6 addresses as well as IPv4 mapped IPv6 addresses.
     //
-    const { hints } = options;
-    if (hints) {
-      switch (hints) {
-        case dns.ADDRCONFIG: {
-          options.family = this.constructor.getAddrConfigTypes();
-          break;
-        }
-
+    if (options.hints) {
+      switch (options.hints) {
         case dns.V4MAPPED: {
           if (options.family === 6 && !answers.some((answer) => isIPv6(answer)))
             answers = answers.map((answer) =>
@@ -564,7 +607,6 @@ class Tangerine extends dns.promises.Resolver {
 
         // eslint-disable-next-line no-bitwise
         case dns.ADDRCONFIG | dns.V4MAPPED: {
-          options.family = this.constructor.getAddrConfigTypes();
           if (options.family === 6 && !answers.some((answer) => isIPv6(answer)))
             answers = answers.map((answer) =>
               ipaddr.parse(answer).toIPv4MappedAddress().toString()
@@ -584,7 +626,6 @@ class Tangerine extends dns.promises.Resolver {
 
         // eslint-disable-next-line no-bitwise
         case dns.ADDRCONFIG | dns.V4MAPPED | dns.ALL: {
-          options.family = this.constructor.getAddrConfigTypes();
           if (options.family === 6 && !answers.some((answer) => isIPv6(answer)))
             answers = answers.map((answer) =>
               ipaddr.parse(answer).toIPv4MappedAddress().toString()
@@ -605,9 +646,20 @@ class Tangerine extends dns.promises.Resolver {
     else if (options.family === 6)
       answers = answers.filter((answer) => isIPv6(answer));
 
+    //
     // respect sort order from `setDefaultResultOrder` method
-    if (options.verbatim !== true && this.options.dnsOrder === 'ipv4first')
-      answers = answers.sort((answer) => (isIPv4(answer) ? 0 : 1));
+    //
+    // NOTE: we need to optimize this sort logic at some point
+    //
+    if (options.verbatim !== true && this.options.dnsOrder === 'ipv4first') {
+      answers = answers.sort((a, b) => {
+        const aFamily = isIP(a);
+        const bFamily = isIP(b);
+        if (aFamily < bFamily) return -1;
+        if (aFamily > bFamily) return 1;
+        return 0;
+      });
+    }
 
     return options.all === true
       ? answers.map((answer) => ({
@@ -618,7 +670,7 @@ class Tangerine extends dns.promises.Resolver {
   }
 
   // <https://man7.org/linux/man-pages/man3/getnameinfo.3.html>
-  async lookupService(address, port, abortController) {
+  async lookupService(address, port, abortController, purgeCache = false) {
     if (!address || !port) {
       const err = new TypeError(
         'The "address" and "port" arguments must be specified.'
@@ -647,7 +699,11 @@ class Tangerine extends dns.promises.Resolver {
 
     // reverse lookup
     try {
-      const [hostname] = await this.reverse(address, abortController);
+      const [hostname] = await this.reverse(
+        address,
+        abortController,
+        purgeCache
+      );
       return { hostname, service: name };
     } catch (err) {
       err.syscall = 'getnameinfo';
@@ -655,7 +711,7 @@ class Tangerine extends dns.promises.Resolver {
     }
   }
 
-  async reverse(ip, abortController) {
+  async reverse(ip, abortController, purgeCache = false) {
     // basically reverse the IP and then perform PTR lookup
     if (typeof ip !== 'string') {
       const err = new TypeError('The "ip" argument must be of type string.');
@@ -677,7 +733,12 @@ class Tangerine extends dns.promises.Resolver {
 
     // perform resolvePTR
     try {
-      const answers = await this.resolve(name, 'PTR', {}, abortController);
+      const answers = await this.resolve(
+        name,
+        'PTR',
+        { purgeCache },
+        abortController
+      );
       return answers;
     } catch (err) {
       // remap syscall
@@ -699,40 +760,40 @@ class Tangerine extends dns.promises.Resolver {
     return this.resolve(name, 'AAAA', options, abortController);
   }
 
-  resolveCaa(name, abortController) {
-    return this.resolve(name, 'CAA', {}, abortController);
+  resolveCaa(name, options, abortController) {
+    return this.resolve(name, 'CAA', options, abortController);
   }
 
-  resolveCname(name, abortController) {
-    return this.resolve(name, 'CNAME', {}, abortController);
+  resolveCname(name, options, abortController) {
+    return this.resolve(name, 'CNAME', options, abortController);
   }
 
-  resolveMx(name, abortController) {
-    return this.resolve(name, 'MX', {}, abortController);
+  resolveMx(name, options, abortController) {
+    return this.resolve(name, 'MX', options, abortController);
   }
 
-  resolveNaptr(name, abortController) {
-    return this.resolve(name, 'NAPTR', {}, abortController);
+  resolveNaptr(name, options, abortController) {
+    return this.resolve(name, 'NAPTR', options, abortController);
   }
 
-  resolveNs(name, abortController) {
-    return this.resolve(name, 'NS', {}, abortController);
+  resolveNs(name, options, abortController) {
+    return this.resolve(name, 'NS', options, abortController);
   }
 
-  resolvePtr(name, abortController) {
-    return this.resolve(name, 'PTR', {}, abortController);
+  resolvePtr(name, options, abortController) {
+    return this.resolve(name, 'PTR', options, abortController);
   }
 
-  resolveSoa(name, abortController) {
-    return this.resolve(name, 'SOA', {}, abortController);
+  resolveSoa(name, options, abortController) {
+    return this.resolve(name, 'SOA', options, abortController);
   }
 
-  resolveSrv(name, abortController) {
-    return this.resolve(name, 'SRV', {}, abortController);
+  resolveSrv(name, options, abortController) {
+    return this.resolve(name, 'SRV', options, abortController);
   }
 
-  resolveTxt(name, abortController) {
-    return this.resolve(name, 'TXT', {}, abortController);
+  resolveTxt(name, options, abortController) {
+    return this.resolve(name, 'TXT', options, abortController);
   }
 
   // 1:1 mapping with node's official dns.promises API
@@ -789,7 +850,13 @@ class Tangerine extends dns.promises.Resolver {
   // eslint-disable-next-line complexity
   async #query(name, rrtype = 'A', ecsSubnet, abortController) {
     if (!dohdec) await pWaitFor(() => Boolean(dohdec));
-    debug('query', { name, rrtype, ecsSubnet, abortController });
+    debug('query', {
+      name,
+      nameToASCII: toASCII(name),
+      rrtype,
+      ecsSubnet,
+      abortController
+    });
     // <https://github.com/hildjj/dohdec/blob/43564118c40f2127af871bdb4d40f615409d4b9c/pkg/dohdec/lib/dnsUtils.js#L161>
     const pkt = dohdec.DNSoverHTTPS.makePacket({
       id:
@@ -797,7 +864,8 @@ class Tangerine extends dns.promises.Resolver {
           ? await this.options.id()
           : this.options.id,
       rrtype,
-      name,
+      // mirrors dns module behavior
+      name: toASCII(name),
       // <https://github.com/mafintosh/dns-packet/pull/47#issuecomment-1435818437>
       ecsSubnet
     });
@@ -932,7 +1000,7 @@ class Tangerine extends dns.promises.Resolver {
     }
   }
 
-  #resolveByType(name, parentAbortController) {
+  #resolveByType(name, options = {}, parentAbortController) {
     return async (type) => {
       const abortController = new AbortController();
       this.abortControllers.add(abortController);
@@ -956,7 +1024,7 @@ class Tangerine extends dns.promises.Resolver {
           case 'A': {
             const result = await this.resolve4(
               name,
-              { ttl: true },
+              { ...options, ttl: true },
               abortController
             );
             return result.map((r) => ({ type, ...r }));
@@ -965,49 +1033,73 @@ class Tangerine extends dns.promises.Resolver {
           case 'AAAA': {
             const result = await this.resolve6(
               name,
-              { ttl: true },
+              { ...options, ttl: true },
               abortController
             );
             return result.map((r) => ({ type, ...r }));
           }
 
           case 'CNAME': {
-            const result = await this.resolveCname(name, abortController);
+            const result = await this.resolveCname(
+              name,
+              options,
+              abortController
+            );
             return result.map((value) => ({ type, value }));
           }
 
           case 'MX': {
-            const result = await this.resolveMx(name, abortController);
+            const result = await this.resolveMx(name, options, abortController);
             return result.map((r) => ({ type, ...r }));
           }
 
           case 'NAPTR': {
-            const result = await this.resolveNaptr(name, abortController);
+            const result = await this.resolveNaptr(
+              name,
+              options,
+              abortController
+            );
             return result.map((value) => ({ type, value }));
           }
 
           case 'NS': {
-            const result = await this.resolveNs(name, abortController);
+            const result = await this.resolveNs(name, options, abortController);
             return result.map((value) => ({ type, value }));
           }
 
           case 'PTR': {
-            const result = await this.resolvePtr(name, abortController);
+            const result = await this.resolvePtr(
+              name,
+              options,
+              abortController
+            );
             return result.map((value) => ({ type, value }));
           }
 
           case 'SOA': {
-            const result = await this.resolveSoa(name, abortController);
+            const result = await this.resolveSoa(
+              name,
+              options,
+              abortController
+            );
             return { type, ...result };
           }
 
           case 'SRV': {
-            const result = await this.resolveSrv(name, abortController);
+            const result = await this.resolveSrv(
+              name,
+              options,
+              abortController
+            );
             return result.map((value) => ({ type, value }));
           }
 
           case 'TXT': {
-            const result = await this.resolveTxt(name, abortController);
+            const result = await this.resolveTxt(
+              name,
+              options,
+              abortController
+            );
             return result.map((entries) => ({ type, entries }));
           }
 
@@ -1025,7 +1117,7 @@ class Tangerine extends dns.promises.Resolver {
   }
 
   // <https://nodejs.org/api/dns.html#dnspromisesresolveanyhostname>
-  async resolveAny(name, abortController) {
+  async resolveAny(name, options = {}, abortController) {
     if (typeof name !== 'string') {
       const err = new TypeError('The "name" argument must be of type string.');
       err.code = 'ERR_INVALID_ARG_TYPE';
@@ -1056,7 +1148,7 @@ class Tangerine extends dns.promises.Resolver {
 
     const results = await pMap(
       this.constructor.ANY_TYPES,
-      this.#resolveByType(name, abortController),
+      this.#resolveByType(name, options, abortController),
       // <https://developers.cloudflare.com/fundamentals/api/reference/limits/>
       { concurrency: this.options.concurrency, signal: abortController.signal }
     );
@@ -1114,9 +1206,16 @@ class Tangerine extends dns.promises.Resolver {
       throw err;
     }
 
+    // purge cache support
+    let purgeCache;
+    if (options?.purgeCache) {
+      purgeCache = true;
+      delete options.purgeCache;
+    }
+
     // ecsSubnet support
     let ecsSubnet;
-    if (options.ecsSubnet) {
+    if (options?.ecsSubnet) {
       ecsSubnet = options.ecsSubnet;
       delete options.ecsSubnet;
     }
@@ -1127,7 +1226,7 @@ class Tangerine extends dns.promises.Resolver {
 
     let result;
     let data;
-    if (this.options.cache) {
+    if (this.options.cache && !purgeCache) {
       //
       // NOTE: we store `result.ttl` which was the lowest TTL determined
       //       (this saves us from duplicating the same `...sort().filter(Number.isFinite)` logic)
@@ -1309,7 +1408,8 @@ class Tangerine extends dns.promises.Resolver {
     }
 
     // if no results then throw ENODATA
-    if (result.answers.length === 0)
+    // (hidden option for `lookup` to prevent errors being thrown)
+    if (result.answers.length === 0 && !options.noThrowOnNODATA)
       throw this.constructor.createError(name, rrtype, dns.NODATA);
 
     // filter the answers for the same type

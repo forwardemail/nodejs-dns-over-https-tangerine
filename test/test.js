@@ -42,9 +42,6 @@ test('exports', async (t) => {
   await t.notThrowsAsync(tangerine.resolve('cloudflare.com'));
 });
 
-// tangerine.setDefaultResultOrder(order)
-test.todo('setDefaultResultOrder');
-
 // new Tangerine(options)
 test('instance', (t) => {
   const tangerine = new Tangerine();
@@ -220,6 +217,9 @@ function compareResults(t, type, r1, r2) {
   }
 }
 
+//
+// NOTE: need to test all options
+//
 for (const host of [
   'forwardemail.net',
   'cloudflare.com',
@@ -228,9 +228,21 @@ for (const host of [
   'gmail.com',
   'microsoft.com'
 ]) {
-  //
-  // NOTE: need to test all options
-  //
+  test(`setDefaultResultOrder with ${host}`, async (t) => {
+    const tangerine = new Tangerine({ cache: false });
+    for (const dnsOrder of ['verbatim', 'ipv4first']) {
+      // set it opposite to the version
+      tangerine.setDefaultResultOrder(dnsOrder);
+      for (let i = 0; i < 5; i++) {
+        // eslint-disable-next-line no-await-in-loop
+        const results = await tangerine.lookup(host, { all: true });
+        const sortedResults =
+          dnsOrder === 'verbatim' ? results : _.sortBy(results, 'family');
+        t.deepEqual(results, sortedResults);
+      }
+    }
+  });
+
   // tangerine.lookup"${host}"[, options])
   test(`lookup("${host}")`, async (t) => {
     // returns { address: IP , family: 4 || 6 }
@@ -656,7 +668,6 @@ test('default cache supports ttl', async (t) => {
   const tangerine = new Tangerine();
   const a = await tangerine.resolve('forwardemail.net');
   const b = await tangerine.options.cache.get('a:forwardemail.net');
-  t.log(b);
   compareResults(
     t,
     'A',
