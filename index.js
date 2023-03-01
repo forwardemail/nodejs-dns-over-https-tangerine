@@ -7,7 +7,7 @@ const { debuglog } = require('node:util');
 const { getEventListeners, setMaxListeners } = require('node:events');
 const { isIP, isIPv4, isIPv6 } = require('node:net');
 
-const { toASCII } = require('punycode/');
+const autoBind = require('auto-bind');
 const getStream = require('get-stream');
 const ipaddr = require('ipaddr.js');
 const mergeOptions = require('merge-options');
@@ -18,6 +18,8 @@ const packet = require('dns-packet');
 const semver = require('semver');
 const structuredClone = require('@ungap/structured-clone').default;
 const { getService } = require('port-numbers');
+// eslint-disable-next-line import/order
+const { toASCII } = require('punycode/');
 
 const pkg = require('./package.json');
 
@@ -363,6 +365,13 @@ class Tangerine extends dns.promises.Resolver {
 
     // manage set of abort controllers
     this.abortControllers = new Set();
+
+    //
+    // NOTE: bind methods so we don't have to programmatically call `.bind`
+    // (e.g. `getDmarcRecord(name, resolver.resolve.bind(resolver))`)
+    // (alternative to `autoBind(this)` is `this[method] = this[method].bind(this)`)
+    //
+    autoBind(this);
   }
 
   setLocalAddress(ipv4, ipv6) {
