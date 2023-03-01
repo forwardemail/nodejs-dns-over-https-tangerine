@@ -229,7 +229,7 @@ for (const host of [
   'microsoft.com'
 ]) {
   // test seems to be broken on GitHub CI (maybe due to IPv6 setup?)
-  test.todo('setDefaultResultOrder');
+  test.todo(`setDefaultResultOrder with ${host}`);
   /*
   test(`setDefaultResultOrder with ${host}`, async (t) => {
     const tangerine = new Tangerine({ cache: false });
