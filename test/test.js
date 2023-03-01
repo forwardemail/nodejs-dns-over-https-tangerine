@@ -1,5 +1,5 @@
 const dns = require('node:dns');
-const { isIPv4, isIPv6 } = require('node:net');
+const { isIP, isIPv4, isIPv6 } = require('node:net');
 
 const Redis = require('ioredis-mock');
 const _ = require('lodash');
@@ -235,10 +235,23 @@ for (const host of [
       tangerine.setDefaultResultOrder(dnsOrder);
       for (let i = 0; i < 5; i++) {
         // eslint-disable-next-line no-await-in-loop
-        const results = await tangerine.lookup(host, { all: true });
-        const sortedResults =
-          dnsOrder === 'verbatim' ? results : _.sortBy(results, 'family');
-        t.deepEqual(results, sortedResults);
+        const [results, dnsResults] = await Promise.all([
+          tangerine.lookup(host, { all: true }),
+          dns.promises.lookup(host, { all: true })
+        ]);
+        // since IP's can vary based off round-robin DNS or geo DNS
+        // we simply return the sorted results based off IPv4 or IPv6 sort
+        const sortedResults = (
+          dnsOrder === 'verbatim' ? results : _.sortBy(results, 'family')
+        ).map((result) => result.family);
+        t.deepEqual(
+          results.map((result) => result.family),
+          sortedResults
+        );
+        t.deepEqual(
+          dnsResults.map((result) => result.family),
+          sortedResults
+        );
       }
     }
   });
@@ -251,20 +264,8 @@ for (const host of [
     let r2 = await dns.promises.lookup(host);
     if (_.isPlainObject(r1)) r1 = [r1];
     if (_.isPlainObject(r2)) r2 = [r2];
-    if (!_.isError(r1))
-      r1 = r1.every(
-        (o) =>
-          isIPv4(o.address) ||
-          (isIPv6(o.address) && o.family === 4) ||
-          o.family === 6
-      );
-    if (!_.isError(r2))
-      r2 = r2.every(
-        (o) =>
-          isIPv4(o.address) ||
-          (isIPv6(o.address) && o.family === 4) ||
-          o.family === 6
-      );
+    if (!_.isError(r1)) r1 = r1.every((o) => isIP(o.address) === o.family);
+    if (!_.isError(r2)) r2 = r2.every((o) => isIP(o.address) === o.family);
     t.deepEqual(r1, r2);
   });
 

@@ -455,7 +455,7 @@ class Tangerine extends dns.promises.Resolver {
 
     // if options is an integer, it must be 4 or 6
     if (typeof options === 'number') {
-      if (options !== 4 && options !== 6) {
+      if (options !== 0 && options !== 4 && options !== 6) {
         const err = new TypeError(
           `The argument 'family' must be one of: 0, 4, 6. Received ${options}`
         );
@@ -478,6 +478,8 @@ class Tangerine extends dns.promises.Resolver {
 
     if (options?.family === 'IPv4') options.family = 4;
     else if (options?.family === 'IPv6') options.family = 6;
+
+    if (typeof options.family !== 'number') options.family = 0;
 
     // validate hints
     // eslint-disable-next-line no-bitwise
@@ -526,18 +528,16 @@ class Tangerine extends dns.promises.Resolver {
     let answers = [];
 
     try {
-      // `any` or `all` is based off !options.family || options.family === 0
-      // (according to official nodejs dns.lookup docs)
-      answers = await Promise[
-        typeof options.family === 'undefined' || options.family === 0
-          ? 'all'
-          : 'any'
-      ]([
-        // the only downside here is that if one succeeds the other won't be aborted (iff "any")
+      answers = await Promise.all([
         this.resolve4(name, { purgeCache, noThrowOnNODATA: true }),
         this.resolve6(name, { purgeCache, noThrowOnNODATA: true })
       ]);
-      answers = answers.flat();
+      // default node behavior seems to return IPv4 by default always regardless
+      answers =
+        answers[0].length > 0 &&
+        (typeof options.family === 'undefined' || options.family === 0)
+          ? answers[0]
+          : answers.flat();
     } catch (_err) {
       debug(_err);
 
