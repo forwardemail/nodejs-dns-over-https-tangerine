@@ -595,7 +595,17 @@ for (const host of [
       r2 = err;
     }
 
+    // ensures buffer decoding cache working
+    let r3;
+    try {
+      r3 = await tangerine.resolveTxt(host);
+    } catch (err) {
+      r3 = err;
+    }
+
     compareResults(t, 'TXT', r1, r2);
+    compareResults(t, 'TXT', r1, r3);
+    compareResults(t, 'TXT', r2, r3);
   });
 }
 
@@ -730,4 +740,26 @@ test('supports redis cache', async (t) => {
     b.answers.map((a) => a.data),
     c.answers.map((a) => a.data)
   );
+});
+
+test('supports decoding of cached Buffers', async (t) => {
+  const json = `{"id":0,"type":"response","flags":384,"flag_qr":true,"opcode":"QUERY","flag_aa":false,"flag_tc":false,"flag_rd":true,"flag_ra":true,"flag_z":false,"flag_ad":false,"flag_cd":false,"rcode":"NOERROR","questions":[{"name":"forwardemail.net","type":"TXT","class":"IN"}],"answers":[{"name":"forwardemail.net","type":"TXT","ttl":3600,"class":"IN","flush":false,"data":[{"type":"Buffer","data":[104,101,108,108,111,32,119,111,114,108,100,33]}]},{"name":"forwardemail.net","type":"TXT","ttl":3600,"class":"IN","flush":false,"data":[{"type":"Buffer","data":[104,101,108,108,111,32,119,111,114,108,100,33]}]},{"name":"forwardemail.net","type":"TXT","ttl":3600,"class":"IN","flush":false,"data":[{"type":"Buffer","data":[104,101,108,108,111,32,119,111,114,108,100,33]}]},{"name":"forwardemail.net","type":"TXT","ttl":3600,"class":"IN","flush":false,"data":[{"type":"Buffer","data":[104,101,108,108,111,32,119,111,114,108,100,33]}]},{"name":"forwardemail.net","type":"TXT","ttl":3600,"class":"IN","flush":false,"data":[{"type":"Buffer","data":[104,101,108,108,111,32,119,111,114,108,100,33]}]}],"authorities":[],"additionals":[{"name":".","type":"OPT","udpPayloadSize":1232,"extendedRcode":0,"ednsVersion":0,"flags":0,"flag_do":false,"options":[{"code":12,"type":"PADDING","data":{"type":"Buffer","data":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]}}]}],"ttl":3600,"expires":${
+    Date.now() + 10000
+  }}`;
+  const cache = new Map();
+  const { get } = cache;
+  cache.get = function (key) {
+    return JSON.parse(get.call(cache, key));
+  };
+
+  const tangerine = new Tangerine({ cache });
+  cache.set('txt:forwardemail.net', json);
+  const results = await tangerine.resolveTxt('forwardemail.net');
+  t.deepEqual(results, [
+    ['hello world!'],
+    ['hello world!'],
+    ['hello world!'],
+    ['hello world!'],
+    ['hello world!']
+  ]);
 });

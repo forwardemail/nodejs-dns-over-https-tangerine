@@ -1243,7 +1243,7 @@ class Tangerine extends dns.promises.Resolver {
       data = await this.options.cache.get(key);
       // safeguard in case cache pollution
       if (data && typeof data === 'object') {
-        debug('cache retrieved', data);
+        debug('cache retrieved', key);
         const now = Date.now();
         // safeguard in case cache pollution
         if (
@@ -1252,6 +1252,7 @@ class Tangerine extends dns.promises.Resolver {
           !Number.isFinite(data.ttl) ||
           data.ttl < 1
         ) {
+          debug('cache expired', key);
           data = undefined;
         } else if (options?.ttl) {
           // clone the data so that we don't mutate cache (e.g. if it's in-memory)
@@ -1271,6 +1272,7 @@ class Tangerine extends dns.promises.Resolver {
 
               // eslint-disable-next-line max-depth
               if (data.answers[i].ttl <= 0) {
+                debug('answer cache expired', key);
                 data = undefined;
                 break;
               }
@@ -1517,13 +1519,57 @@ class Tangerine extends dns.promises.Resolver {
 
       case 'TXT': {
         // text records `dnsPromises.resolveTxt()`
-        return result.answers.flatMap((a) => [
-          Buffer.isBuffer(a.data)
-            ? a.data.toString()
-            : Array.isArray(a.data)
-            ? a.data.map((d) => (Buffer.isBuffer(d) ? d.toString() : d))
-            : a.data
-        ]);
+        return result.answers.flatMap((a) => {
+          //
+          // NOTE: we need to support buffer conversion
+          //       (e.g. JSON.stringify from most cache stores will convert this as such below)
+          //
+          // a {
+          //   name: 'forwardemail.net',
+          //   type: 'TXT',
+          //   ttl: 3600,
+          //   class: 'IN',
+          //   flush: false,
+          //   data: [ { type: 'Buffer', data: [Array] } ]
+          // }
+          //
+          // (or)
+          //
+          // a {
+          //   name: 'forwardemail.net',
+          //   type: 'TXT',
+          //   ttl: 3600,
+          //   class: 'IN',
+          //   flush: false,
+          //   data: { type: 'Buffer', data: [Array] }
+          // }
+          //
+          if (Array.isArray(a.data)) {
+            a.data = a.data.map((d) => {
+              if (
+                typeof d === 'object' &&
+                d.type === 'Buffer' &&
+                Array.isArray(d.data)
+              )
+                return Buffer.from(d.data);
+              return d;
+            });
+          } else if (
+            typeof a.data === 'object' &&
+            a.data.type === 'Buffer' &&
+            Array.isArray(a.data.data)
+          ) {
+            a.data = Buffer.from(a.data.data);
+          }
+
+          return [
+            Buffer.isBuffer(a.data)
+              ? a.data.toString()
+              : Array.isArray(a.data)
+              ? a.data.map((d) => (Buffer.isBuffer(d) ? d.toString() : d))
+              : a.data
+          ];
+        });
       }
 
       default: {
