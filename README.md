@@ -158,7 +158,6 @@ Thanks to the authors of [dohdec](https://github.com/hildjj/dohdec), [dns-packet
 * `resolveNs` → `queryNs`
 * `resolveNs` → `queryNs`
 * `resolveTxt` → `queryTxt`
-* `resolveTsla` → `queryTsla`
 * `resolveSrv` → `querySrv`
 * `resolvePtr` → `queryPtr`
 * `resolveNaptr` → `queryNaptr`
@@ -294,7 +293,7 @@ This mirrors output from <https://github.com/rthalley/dnspython>.
 
 ### `tangerine.resolveTlsa(hostname, [, options, abortController]))`
 
-This method was added for DANE and TSLA support.  See this [excellent article](https://www.mailhardener.com/kb/dane), [index.js](https://github.com/forwardemail/tangerine/blob/main/index.js), and <https://github.com/nodejs/node/issues/39569> for more insight.
+This method was added for DANE and TLSA support.  See this [excellent article](https://www.mailhardener.com/kb/dane), [index.js](https://github.com/forwardemail/tangerine/blob/main/index.js), and <https://github.com/nodejs/node/issues/39569> for more insight.
 
 This function returns a Promise that resolves with an Array with parsed values from results:
 
