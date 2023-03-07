@@ -1,4 +1,5 @@
 const dns = require('node:dns');
+const { Buffer } = require('node:buffer');
 const { isIP, isIPv4, isIPv6 } = require('node:net');
 
 const Redis = require('ioredis-mock');
@@ -290,7 +291,7 @@ for (const host of [
     t.deepEqual(r1, r2);
   });
 
-  for (const type of Tangerine.TYPES) {
+  for (const type of Tangerine.DNS_TYPES) {
     test(`resolve("${host}", "${type}")`, async (t) => {
       const tangerine = new Tangerine();
       const resolver = new Resolver();
@@ -762,4 +763,67 @@ test('supports decoding of cached Buffers', async (t) => {
     ['hello world!'],
     ['hello world!']
   ]);
+});
+
+// <https://github.com/jpnarkinsky/tangerine/commit/5f70954875aa93ef4acf076172d7540298b0a16b#diff-a561630bb56b82342bc66697aee2ad96efddcbc9d150665abd6fb7ecb7c0ab2f>
+test('resolveCert', async (t) => {
+  const tangerine = new Tangerine();
+
+  let r1;
+  try {
+    r1 = await tangerine.resolveCert('ett.healthit.gov');
+  } catch (err) {
+    r1 = err;
+  }
+
+  // Since the node resolver has no support for resolving CERT
+  // records, the standard approach won't work here.  So, we lookup
+  // a well known address that DOES have a CERT record, then check
+  // that the resorts are sensible, since that's the best we can do.
+  t.assert(r1.length > 0, "Couldn't resolve CERT record for ett.healthit.gov!");
+
+  t.log(r1);
+
+  for (const d of r1) {
+    t.assert(typeof d === 'object', 'must be an object');
+    t.assert(typeof d.name === 'string', 'name missing');
+    t.assert(typeof d.ttl === 'number', 'ttl missing');
+    t.assert(
+      typeof d.certificate_type === 'string',
+      'certificate_type missing'
+    );
+    t.assert(typeof d.key_tag === 'number', 'key_tag missing');
+    t.assert(typeof d.algorithm === 'number', 'algorithm missing');
+    t.assert(typeof d.certificate === 'string', 'certificate missing');
+  }
+});
+
+// similar edge case as resolveCert above, but for resolveTlsa
+// <https://github.com/internetstandards/toolbox-wiki/blob/main/DANE-for-SMTP-how-to.md>
+test('resolveTlsa', async (t) => {
+  const tangerine = new Tangerine();
+
+  let r1;
+  try {
+    r1 = await tangerine.resolveTlsa('_25._tcp.internet.nl');
+  } catch (err) {
+    r1 = err;
+  }
+
+  t.assert(
+    r1.length > 0,
+    "Couldn't resolve TLSA record for _25._tcp.internet.nl!"
+  );
+
+  t.log(r1);
+
+  for (const d of r1) {
+    t.assert(typeof d === 'object', 'must be an object');
+    t.assert(typeof d.name === 'string', 'name missing');
+    t.assert(typeof d.ttl === 'number', 'ttl missing');
+    t.assert(typeof d.usage === 'number', 'usage missing');
+    t.assert(typeof d.selector === 'number', 'selector missing');
+    t.assert(typeof d.mtype === 'number', 'mtype missing');
+    t.assert(Buffer.isBuffer(d.cert), 'cert must be buffer');
+  }
 });

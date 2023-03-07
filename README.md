@@ -51,6 +51,8 @@
   * [`tangerine.resolveSoa(hostname[, options, abortController]))`](#tangerineresolvesoahostname-options-abortcontroller)
   * [`tangerine.resolveSrv(hostname[, options, abortController]))`](#tangerineresolvesrvhostname-options-abortcontroller)
   * [`tangerine.resolveTxt(hostname[, options, abortController]))`](#tangerineresolvetxthostname-options-abortcontroller)
+  * [`tangerine.resolveCert(hostname, [, options, abortController]))`](#tangerineresolvecerthostname--options-abortcontroller)
+  * [`tangerine.resolveTlsa(hostname, [, options, abortController]))`](#tangerineresolvetlsahostname--options-abortcontroller)
   * [`tangerine.reverse(ip[, abortController, purgeCache])`](#tangerinereverseip-abortcontroller-purgecache)
   * [`tangerine.setDefaultResultOrder(order)`](#tangerinesetdefaultresultorderorder)
   * [`tangerine.setServers(servers)`](#tangerinesetserversservers)
@@ -156,6 +158,7 @@ Thanks to the authors of [dohdec](https://github.com/hildjj/dohdec), [dns-packet
 * `resolveNs` → `queryNs`
 * `resolveNs` → `queryNs`
 * `resolveTxt` → `queryTxt`
+* `resolveTsla` → `queryTsla`
 * `resolveSrv` → `querySrv`
 * `resolvePtr` → `queryPtr`
 * `resolveNaptr` → `queryNaptr`
@@ -230,6 +233,7 @@ tangerine.resolve('forwardemail.net').then(console.log);
   * If set to `true`, then the result will be re-queried and re-cached – see [Cache](#cache) documentation for more insight.
 * Instances of `new Tangerine()` are instances of `dns.promises.Resolver` via `class Tangerine extends dns.promises.Resolver { ... }` (namely for compatibility with projects such as [cacheable-lookup](https://github.com/szmarczak/cacheable-lookup)).
 * See the complete list of [Options](#options) below.
+* Any `rrtype` from the list at <https://www.iana.org/assignments/dns-parameters/dns-parameters.xhtml#dns-parameters-4> is supported (unlike the native Node.js DNS module which only supports a limited set).
 
 ### `tangerine.cancel()`
 
@@ -268,6 +272,58 @@ Tangerine supports a new `ecsSubnet` property in the `options` Object argument.
 ### `tangerine.resolveSrv(hostname[, options, abortController]))`
 
 ### `tangerine.resolveTxt(hostname[, options, abortController]))`
+
+### `tangerine.resolveCert(hostname, [, options, abortController]))`
+
+This function returns a Promise that resolves with an Array with parsed values from results:
+
+```js
+[
+  {
+    algorithm: 0,
+    certificate: 'MIIEoTCCA4mgAwIBAgICAacwDQYJKoZIhvcNAQELBQAwgY0xCzAJBgNVBAYTAlVTMQswCQYDVQQIDAJNRDEOMAwGA1UEBwwFQm95ZHMxEzARBgNVBAoMCkRyYWplciBMTEMxIjAgBgNVBAMMGWludGVybWVkaWF0ZS5oZWFsdGhpdC5nb3YxKDAmBgkqhkiG9w0BCQEWGWludGVybWVkaWF0ZS5oZWFsdGhpdC5nb3YwHhcNMTgwOTI1MTgyNDIzWhcNMjgwOTIyMTgyNDIzWjB7MQswCQYDVQQGEwJVUzELMAkGA1UECAwCTUQxDjAMBgNVBAcMBUJveWRzMRMwEQYDVQQKDApEcmFqZXIgTExDMRkwFwYDVQQDDBBldHQuaGVhbHRoaXQuZ292MR8wHQYJKoZIhvcNAQkBFhBldHQuaGVhbHRoaXQuZ292MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAxaA2MIuaqpvP2Id85KIhUVA6zlj+CgZh/3prgJ1q4leP3T5F1tSSgrQ/WYTFglEwN7FJx4yJ324NaKncaMPDBIg3IUgC3Q5nrPUbIJAUgM5+67pXnGgt6s9bQelEsTdbyA/JlLC7Hsv184mqo0yrueC9NJEea4/yTV51G9S4jLjnKhr0XUTw0Fb/PFNL9ZwaEdFgQfUaE1maleazKGDyLLuEGvpXsRNs1Ju/kdHkOUVLf741Cq8qLlqOKN2v5jQkUdFUKHbYIF5KXt4ToV9mvxTaz6Mps1UbS+a73Xr+VqmBqmEQnXA5DZ7ucikzv9DLokDwtmPzhdqye2msgDpw0QIDAQABo4IBGjCCARYwCQYDVR0TBAIwADAbBgNVHREEFDASghBldHQuaGVhbHRoaXQuZ292MB0GA1UdDgQWBBQ6E22jc99mm+WraUj93IvQcw6JHDAfBgNVHSMEGDAWgBRfW20fzencvG+Attm1rcvQV+3rOTALBgNVHQ8EBAMCBaAwSQYDVR0fBEIwQDA+oDygOoY4aHR0cDovL2NhLmRpcmVjdGNhLm9yZy9jcmwvaW50ZXJtZWRpYXRlLmhlYWx0aGl0Lmdvdi5jcmwwVAYIKwYBBQUHAQEESDBGMEQGCCsGAQUFBzAChjhodHRwOi8vY2EuZGlyZWN0Y2Eub3JnL2FpYS9pbnRlcm1lZGlhdGUuaGVhbHRoaXQuZ292LmRlcjANBgkqhkiG9w0BAQsFAAOCAQEAhCASLubdxWp+XzXO4a8zMgWOMpjft+ilIy2ROVKOKslbB7lKx0NR7chrTPxCmK+YTL2ttLaTpOniw/vTGrZgeFPyXzJCNtpnx8fFipPE18OAlKMc2nyy7RfUscf28UAEmFo2cEJfpsZjyynkBsTnQ5rQVNgM7TbXXfboxwWwhg4HnWIcmlTs2YM1a9v+idK6LSfX9y/Nvhf9pl0DQflc9ym4z/XCq87erCce+11kxH1+36N6rRqeiHVBYnoYIGMH690r4cgE8cW5B4eK7kaD3iCbmpChO0gZSa5Lex49WLXeFfM+ukd9y3AB00KMZcsUV5bCgwShH053ZQa+FMON8w==',
+    certificate_type: 'PKIX',
+    key_tag: 0,
+    name: 'ett.healthit.gov',
+    ttl: 19045,
+  },
+]
+```
+
+This mirrors output from <https://github.com/rthalley/dnspython>.
+
+### `tangerine.resolveTlsa(hostname, [, options, abortController]))`
+
+This method was added for DANE and TSLA support.  See this [excellent article](https://www.mailhardener.com/kb/dane), [index.js](https://github.com/forwardemail/tangerine/blob/main/index.js), and <https://github.com/nodejs/node/issues/39569> for more insight.
+
+This function returns a Promise that resolves with an Array with parsed values from results:
+
+```js
+[
+  {
+    cert: Buffer @Uint8Array [
+      e1ae9c3d e848ece1 ba72e0d9 91ae4d0d 9ec547c6 bad1ddda b9d6beb0 a7e0e0d8
+    ],
+    mtype: 1,
+    name: 'proloprod.mail._dane.internet.nl',
+    selector: 1,
+    ttl: 622,
+    usage: 2,
+  },
+  {
+    cert: Buffer @Uint8Array [
+      d6fea64d 4e68caea b7cbb2e0 f905d7f3 ca3308b1 2fd88c5b 469f08ad 7e05c7c7
+    ],
+    mtype: 1,
+    name: 'proloprod.mail._dane.internet.nl',
+    selector: 1,
+    ttl: 622,
+    usage: 3,
+  },
+]
+```
+
+This mirrors output from <https://github.com/rthalley/dnspython>.
 
 ### `tangerine.reverse(ip[, abortController, purgeCache])`
 

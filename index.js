@@ -38,6 +38,19 @@ class Tangerine extends dns.promises.Resolver {
     return Number.isSafeInteger(port) && port >= 0 && port <= 65535;
   }
 
+  static CTYPE_BY_VALUE = {
+    1: 'PKIX',
+    2: 'SPKI',
+    3: 'PGP',
+    4: 'IPKIX',
+    5: 'ISPKI',
+    6: 'IPGP',
+    7: 'ACPKIX',
+    8: 'IACPKIX',
+    253: 'URI',
+    254: 'OID'
+  };
+
   static getAddrConfigTypes() {
     const networkInterfaces = os.networkInterfaces();
     let hasIPv4 = false;
@@ -138,7 +151,7 @@ class Tangerine extends dns.promises.Resolver {
     dns.TIMEOUT
   ]);
 
-  static TYPES = new Set([
+  static DNS_TYPES = new Set([
     'A',
     'AAAA',
     'CAA',
@@ -150,6 +163,99 @@ class Tangerine extends dns.promises.Resolver {
     'SOA',
     'SRV',
     'TXT'
+  ]);
+
+  // <https://www.iana.org/assignments/dns-parameters/dns-parameters.xhtml#dns-parameters-4>
+  static TYPES = new Set([
+    'A',
+    'A6',
+    'AAAA',
+    'AFSDB',
+    'AMTRELAY',
+    'APL',
+    'ATMA',
+    'AVC',
+    'AXFR',
+    'CAA',
+    'CDNSKEY',
+    'CDS',
+    'CERT',
+    'CNAME',
+    'CSYNC',
+    'DHCID',
+    'DLV',
+    'DNAME',
+    'DNSKEY',
+    'DOA',
+    'DS',
+    'EID',
+    'EUI48',
+    'EUI64',
+    'GID',
+    'GPOS',
+    'HINFO',
+    'HIP',
+    'HTTPS',
+    'IPSECKEY',
+    'ISDN',
+    'IXFR',
+    'KEY',
+    'KX',
+    'L32',
+    'L64',
+    'LOC',
+    'LP',
+    'MAILA',
+    'MAILB',
+    'MB',
+    'MD',
+    'MF',
+    'MG',
+    'MINFO',
+    'MR',
+    'MX',
+    'NAPTR',
+    'NID',
+    'NIMLOC',
+    'NINFO',
+    'NS',
+    'NSAP',
+    'NSAP-PTR',
+    'NSEC',
+    'NSEC3',
+    'NSEC3PARAM',
+    'NULL',
+    'NXT',
+    'OPENPGPKEY',
+    'OPT',
+    'PTR',
+    'PX',
+    'RKEY',
+    'RP',
+    'RRSIG',
+    'RT',
+    'Reserved',
+    'SIG',
+    'SINK',
+    'SMIMEA',
+    'SOA',
+    'SPF',
+    'SRV',
+    'SSHFP',
+    'SVCB',
+    'TA',
+    'TALINK',
+    'TKEY',
+    'TLSA',
+    'TSIG',
+    'TXT',
+    'UID',
+    'UINFO',
+    'UNSPEC',
+    'URI',
+    'WKS',
+    'X25',
+    'ZONEMD'
   ]);
 
   static ANY_TYPES = [
@@ -805,6 +911,15 @@ class Tangerine extends dns.promises.Resolver {
     return this.resolve(name, 'TXT', options, abortController);
   }
 
+  resolveCert(name, options, abortController) {
+    return this.resolve(name, 'CERT', options, abortController);
+  }
+
+  // NOTE: parse this properly according to spec (see below default case)
+  resolveTlsa(name, options, abortController) {
+    return this.resolve(name, 'TLSA', options, abortController);
+  }
+
   // 1:1 mapping with node's official dns.promises API
   // (this means it's a drop-in replacement for `dns`)
   // <https://github.com/nodejs/node/blob/9bbde3d7baef584f14569ef79f116e9d288c7aaa/lib/internal/dns/utils.js#L87-L95>
@@ -1386,7 +1501,7 @@ class Tangerine extends dns.promises.Resolver {
           // this supports both redis-based key/value/ttl and simple key/value implementations
           result.expires = Date.now() + Math.round(result.ttl * 1000);
           const args = [key, result, ...this.options.setCacheArgs(key, result)];
-          debug('setting cache', [key, result, ...args]);
+          debug('setting cache', { args });
           await this.options.cache.set(...args);
         }
 
@@ -1572,8 +1687,64 @@ class Tangerine extends dns.promises.Resolver {
         });
       }
 
+      case 'CERT': {
+        // CERT records `tangerine.resolveCert`
+        // <https://github.com/jpnarkinsky/tangerine/commit/5f70954875aa93ef4acf076172d7540298b0a16b>
+        // <https://www.rfc-editor.org/rfc/rfc4398.html>
+        return result.answers.map((answer) => {
+          if (!Buffer.isBuffer(answer.data))
+            throw new Error('Buffer was not available');
+
+          try {
+            // <https://github.com/rthalley/dnspython/blob/98b12e9e43847dac615bb690355d2fabaff969d2/dns/rdtypes/ANY/CERT.py#L69>
+            const obj = {
+              name: answer.name,
+              ttl: answer.ttl,
+              certificate_type: answer.data.subarray(0, 2).readUInt16BE(),
+              key_tag: answer.data.subarray(2, 4).readUInt16BE(),
+              algorithm: answer.data.subarray(4, 5).readUInt8(),
+              certificate: answer.data.subarray(5).toString('base64')
+            };
+            obj.certificate_type = this.constructor.CTYPE_BY_VALUE[
+              obj.certificate_type
+            ]
+              ? this.constructor.CTYPE_BY_VALUE[obj.certificate_type]
+              : obj.certificate_type.toString();
+            return obj;
+          } catch (err) {
+            console.error(err);
+            throw err;
+          }
+        });
+      }
+
+      case 'TLSA': {
+        // if it returns answers with `type: TLSA` then recursively lookup
+        // 3 1 1 D6FEA64D4E68CAEAB7CBB2E0F905D7F3CA3308B12FD88C5B469F08AD 7E05C7C7
+        return result.answers.map((answer) => {
+          if (!Buffer.isBuffer(answer.data))
+            throw new Error('Buffer was not available');
+
+          // <https://www.mailhardener.com/kb/dane>
+          return {
+            name: answer.name,
+            ttl: answer.ttl,
+            // <https://github.com/rthalley/dnspython/blob/98b12e9e43847dac615bb690355d2fabaff969d2/dns/rdtypes/tlsabase.py#L35>
+            usage: answer.data.subarray(0, 1).readUInt8(),
+            selector: answer.data.subarray(1, 2).readUInt8(),
+            mtype: answer.data.subarray(2, 3).readUInt8(),
+            cert: answer.data.subarray(3)
+          };
+        });
+      }
+
       default: {
-        throw new Error(`Unknown type of ${rrtype}`);
+        this.options.logger.error(
+          new Error(
+            `Submit a PR at <https://github.com/forwardemail/tangerine> with proper parsing for ${rrtype} records.  You can reference <https://github.com/rthalley/dnspython/tree/master/dns/rdtypes/ANY> for inspiration.`
+          )
+        );
+        return result.answers;
       }
     }
   }
