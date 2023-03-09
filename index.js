@@ -30,7 +30,8 @@ const debug = debuglog('tangerine');
 const hosts = new Hosts(
   hostile
     .get()
-    .map((arr) => arr.join(' '))
+    // this is necessary to match how dns c-ares parses the host file
+    .map((arr) => arr[0] + ' ' + arr[1].split(' ').reverse().join(' '))
     .join('\n')
 );
 
@@ -663,16 +664,20 @@ class Tangerine extends dns.promises.Resolver {
     let resolve6;
 
     // sorted in reverse to match behavior of lookup
-    for (const rule of hosts._origin.reverse()) {
+    for (const rule of hosts._origin) {
       if (
         rule.hostname.toLowerCase() !== name.toLowerCase() &&
         rule.ip !== name
       )
         continue;
       const type = isIP(rule.ip);
-      if (!resolve4 && type === 4) resolve4 = [rule.ip];
-      else if (!resolve6 && type === 6) resolve6 = [rule.ip];
-      if (resolve4 && resolve6) break;
+      if (!resolve4 && type === 4) {
+        if (!Array.isArray(resolve4)) resolve4 = [];
+        resolve4.push([rule.ip]);
+      } else if (!resolve6 && type === 6) {
+        if (!Array.isArray(resolve6)) resolve6 = [];
+        resolve6.push(rule.ip);
+      }
     }
 
     // if no matches found for resolve4 and resolve6 and it was localhost
@@ -927,8 +932,18 @@ class Tangerine extends dns.promises.Resolver {
       throw err;
     }
 
-    // edge case where localhost IP returns empty
-    if (ip === '127.0.0.1' || ip === '::1') return [];
+    // edge case where localhost IP returns matches
+    if (ip === '127.0.0.1' || ip === '::1') {
+      const answers = [];
+      for (const rule of hosts._origin) {
+        if (rule.ip === ip) {
+          answers.push(rule.hostname);
+          break;
+        }
+      }
+
+      return answers;
+    }
 
     // reverse the IP address
     if (!dohdec) await pWaitFor(() => Boolean(dohdec));
