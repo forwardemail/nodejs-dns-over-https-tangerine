@@ -7,8 +7,11 @@ const { debuglog } = require('node:util');
 const { getEventListeners, setMaxListeners } = require('node:events');
 const { isIP, isIPv4, isIPv6 } = require('node:net');
 
+const { toASCII } = require('punycode/');
+
 const autoBind = require('auto-bind');
 const getStream = require('get-stream');
+const hostile = require('hostile');
 const ipaddr = require('ipaddr.js');
 const mergeOptions = require('merge-options');
 const pMap = require('p-map');
@@ -17,13 +20,19 @@ const pWaitFor = require('p-wait-for');
 const packet = require('dns-packet');
 const semver = require('semver');
 const structuredClone = require('@ungap/structured-clone').default;
+const { Hosts } = require('hosts-parser');
 const { getService } = require('port-numbers');
-// eslint-disable-next-line import/order
-const { toASCII } = require('punycode/');
 
 const pkg = require('./package.json');
 
 const debug = debuglog('tangerine');
+
+const hosts = new Hosts(
+  hostile
+    .get()
+    .map((arr) => arr.join(' '))
+    .join('\n')
+);
 
 // dynamically import dohdec
 let dohdec;
@@ -148,7 +157,8 @@ class Tangerine extends dns.promises.Resolver {
     dns.NOTINITIALIZED,
     dns.REFUSED,
     dns.SERVFAIL,
-    dns.TIMEOUT
+    dns.TIMEOUT,
+    'EINVAL'
   ]);
 
   static DNS_TYPES = new Set([
@@ -639,50 +649,124 @@ class Tangerine extends dns.promises.Resolver {
       }
     }
 
+    // <https://github.com/c-ares/c-ares/blob/38b30bc922c21faa156939bde15ea35332c30e08/src/lib/ares_getaddrinfo.c#L407>
+    // <https://www.rfc-editor.org/rfc/rfc6761.html#section-6.3>
+    //
+    // >  'localhost and any domains falling within .localhost'
+    //
+    // if no system loopback match, then revert to the default
+    // <https://github.com/c-ares/c-ares/blob/38b30bc922c21faa156939bde15ea35332c30e08/src/lib/ares__addrinfo_localhost.c#L224-L229>
+    // - IPv4 = '127.0.0.1"
+    // - IPv6 = "::1"
+    //
+    let resolve4;
+    let resolve6;
+
+    // sorted in reverse to match behavior of lookup
+    for (const rule of hosts._origin.reverse()) {
+      if (
+        rule.hostname.toLowerCase() !== name.toLowerCase() &&
+        rule.ip !== name
+      )
+        continue;
+      const type = isIP(rule.ip);
+      if (!resolve4 && type === 4) resolve4 = [rule.ip];
+      else if (!resolve6 && type === 6) resolve6 = [rule.ip];
+      if (resolve4 && resolve6) break;
+    }
+
+    // if no matches found for resolve4 and resolve6 and it was localhost
+    // (this is a safeguard in case host file is missing these)
+    if (
+      name.toLowerCase() === 'localhost' ||
+      name.toLowerCase() === 'localhost.'
+    ) {
+      if (!resolve4) resolve4 = ['127.0.0.1'];
+      if (!resolve6) resolve6 = ['::1'];
+    }
+
+    if (isIPv4(name)) {
+      resolve4 = [name];
+      resolve6 = [];
+    } else if (isIPv6(name)) {
+      resolve6 = [name];
+      resolve4 = [];
+    }
+
     // resolve the first A or AAAA record (conditionally)
+    const results = await Promise.all(
+      [
+        Array.isArray(resolve4)
+          ? Promise.resolve(resolve4)
+          : this.resolve4(name, { purgeCache, noThrowOnNODATA: true }),
+        Array.isArray(resolve6)
+          ? Promise.resolve(resolve6)
+          : this.resolve6(name, { purgeCache, noThrowOnNODATA: true })
+      ].map((p) => p.catch((err) => err))
+    );
+
+    const errors = [];
     let answers = [];
 
-    try {
-      answers = await Promise.all([
-        this.resolve4(name, { purgeCache, noThrowOnNODATA: true }),
-        this.resolve6(name, { purgeCache, noThrowOnNODATA: true })
-      ]);
-      // default node behavior seems to return IPv4 by default always regardless
+    for (const result of results) {
+      if (result instanceof Error) {
+        errors.push(result);
+      } else {
+        answers.push(result);
+      }
+    }
+
+    if (
+      answers.length === 0 &&
+      errors.length > 0 &&
+      errors.every((e) => e.code === errors[0].code)
+    ) {
+      const err = this.constructor.createError(
+        name,
+        '',
+        errors[0].code === dns.BADNAME ? dns.NOTFOUND : errors[0].code
+      );
+      // remap and perform syscall
+      err.syscall = 'getaddrinfo';
+      err.message = err.message.replace('query', 'getaddrinfo');
+      err.errno = -3008;
+      throw err;
+    }
+
+    /*
+      //
+      // NOTE: we probably should handle this differently (?)
+      //       (not sure what native nodejs dns module does for different errors - haven't checked yet)
+      //
+      if (errors.every((e) => e.code !== 'ENODATA')) {
+        const err = this.constructor.combineErrors(errors);
+        err.hostname = name;
+        // remap and perform syscall
+        err.syscall = 'getaddrinfo';
+        err.message = err.message.replace('query', 'getaddrinfo');
+        if (!err.code)
+          err.code = errors.find((e) => e.code)?.code || dns.BADRESP;
+        if (!err.errno)
+          err.errno = errors.find((e) => e.errno)?.errno || undefined;
+        throw err;
+      }
+      */
+
+    // default node behavior seems to return IPv4 by default always regardless
+    if (answers.length > 0)
       answers =
         answers[0].length > 0 &&
         (typeof options.family === 'undefined' || options.family === 0)
           ? answers[0]
           : answers.flat();
-    } catch (_err) {
-      debug(_err);
-
-      // this will most likely be instanceof AggregateError
-      if (_err instanceof AggregateError) {
-        const err = this.constructor.combineErrors(_err.errors);
-        err.hostname = name;
-        // remap and perform syscall
-        err.syscall = 'getaddrinfo';
-        if (!err.code)
-          err.code = _err.errors.find((e) => e.code)?.code || dns.BADRESP;
-        if (!err.errno)
-          err.errno = _err.errors.find((e) => e.errno)?.errno || undefined;
-
-        throw err;
-      }
-
-      const err = this.constructor.createError(name, '', _err.code, _err.errno);
-      // remap and perform syscall
-      err.syscall = 'getaddrinfo';
-      err.error = _err;
-      throw err;
-    }
 
     // if no results then throw ENODATA
     if (answers.length === 0) {
       const err = this.constructor.createError(name, '', dns.NODATA);
       // remap and perform syscall
       err.syscall = 'getaddrinfo';
-      // err.errno = -3008;
+      err.message = err.message.replace('query', 'getaddrinfo');
+      err.errno = -3008;
       throw err;
     }
 
@@ -835,15 +919,20 @@ class Tangerine extends dns.promises.Resolver {
     }
 
     if (!isIP(ip)) {
-      const err = this.constructor.createError(ip, '', dns.EINVAL);
+      const err = this.constructor.createError(ip, '', 'EINVAL');
+      err.message = `getHostByAddr EINVAL ${err.hostname}`;
       err.syscall = 'getHostByAddr';
-      // err.errno = -22;
+      err.errno = -22;
       if (!ip) delete err.hostname;
       throw err;
     }
 
+    // edge case where localhost IP returns empty
+    if (ip === '127.0.0.1' || ip === '::1') return [];
+
     // reverse the IP address
     if (!dohdec) await pWaitFor(() => Boolean(dohdec));
+
     const name = dohdec.DNSoverHTTPS.reverse(ip);
 
     // perform resolvePTR
@@ -1270,13 +1359,22 @@ class Tangerine extends dns.promises.Resolver {
       );
     }
 
-    const results = await pMap(
-      this.constructor.ANY_TYPES,
-      this.#resolveByType(name, options, abortController),
-      // <https://developers.cloudflare.com/fundamentals/api/reference/limits/>
-      { concurrency: this.options.concurrency, signal: abortController.signal }
-    );
-    return results.flat().filter(Boolean);
+    try {
+      const results = await pMap(
+        this.constructor.ANY_TYPES,
+        this.#resolveByType(name, options, abortController),
+        // <https://developers.cloudflare.com/fundamentals/api/reference/limits/>
+        {
+          concurrency: this.options.concurrency,
+          signal: abortController.signal
+        }
+      );
+      return results.flat().filter(Boolean);
+    } catch (err) {
+      err.syscall = 'queryAny';
+      err.message = `queryAny ${err.code} ${name}`;
+      throw err;
+    }
   }
 
   setDefaultResultOrder(dnsOrder) {
@@ -1329,6 +1427,11 @@ class Tangerine extends dns.promises.Resolver {
       err.code = 'ERR_INVALID_ARG_VALUE';
       throw err;
     }
+
+    // edge case where c-ares detects "." as start of string
+    // <https://github.com/c-ares/c-ares/blob/38b30bc922c21faa156939bde15ea35332c30e08/src/lib/ares_getaddrinfo.c#L829>
+    if (name.startsWith('.') || name.includes('..'))
+      throw this.constructor.createError(name, rrtype, dns.BADNAME);
 
     // purge cache support
     let purgeCache;
@@ -1712,7 +1815,7 @@ class Tangerine extends dns.promises.Resolver {
               : obj.certificate_type.toString();
             return obj;
           } catch (err) {
-            console.error(err);
+            this.options.logger.error(err, { name, rrtype, options, answer });
             throw err;
           }
         });

@@ -187,6 +187,8 @@ function compareResults(t, type, r1, r2) {
       }
 
       if (_.isError(r1) || _.isError(r2)) {
+        t.log(r1);
+        t.log(r2);
         t.deepEqual(r1, r2);
       } else {
         // r1/r2 = [ { type: 'TXT', value: 'blah' }, ... ] }
@@ -222,6 +224,25 @@ function compareResults(t, type, r1, r2) {
 // NOTE: need to test all options
 //
 for (const host of [
+  'localhost',
+  'localhost.',
+  '..localhost',
+  'localhost..',
+  'beep..',
+  'beep.com..',
+  'beep..com..',
+  'foo..com',
+  '..foo.com',
+  '..foo..com.',
+  '.foo.com.',
+  'foo..localhost',
+  'foo..localhost..localhost',
+  '.localhost',
+  'foo.localhost',
+  'foo.bar.localhost',
+  '::1',
+  '::0',
+  '127.0.0.1',
   'forwardemail.net',
   'cloudflare.com',
   'stackoverflow.com',
@@ -265,12 +286,53 @@ for (const host of [
   });
   */
 
+  // tangerine.reverse
+  test(`reverse("${host}")`, async (t) => {
+    const tangerine = new Tangerine();
+    const resolver = new Resolver();
+    if (!t.context.isBlackholed) resolver.setServers(tangerine.getServers());
+
+    let r1;
+    let r2;
+    try {
+      r1 = await tangerine.reverse(host);
+    } catch (err) {
+      r1 = err;
+    }
+
+    try {
+      r2 = await resolver.reverse(host);
+    } catch (err) {
+      r2 = err;
+    }
+
+    t.log(r1);
+    t.log(r2);
+
+    compareResults(t, 'reverse', r1, r2);
+  });
+
   // tangerine.lookup"${host}"[, options])
   test(`lookup("${host}")`, async (t) => {
     // returns { address: IP , family: 4 || 6 }
     const tangerine = new Tangerine();
-    let r1 = await tangerine.lookup(host);
-    let r2 = await dns.promises.lookup(host);
+    let r1;
+    let r2;
+    try {
+      r1 = await tangerine.lookup(host);
+    } catch (err) {
+      r1 = err;
+    }
+
+    try {
+      r2 = await dns.promises.lookup(host);
+    } catch (err) {
+      r2 = err;
+    }
+
+    t.log(r1);
+    t.log(r2);
+
     if (_.isPlainObject(r1)) r1 = [r1];
     if (_.isPlainObject(r2)) r2 = [r2];
     if (!_.isError(r1)) r1 = r1.every((o) => isIP(o.address) === o.family);
@@ -283,8 +345,23 @@ for (const host of [
     const tangerine = new Tangerine();
     const resolver = new Resolver();
     if (!t.context.isBlackholed) resolver.setServers(tangerine.getServers());
-    let r1 = await tangerine.resolve(host);
-    let r2 = await resolver.resolve(host);
+    let r1;
+    let r2;
+    try {
+      r1 = await tangerine.resolve(host);
+    } catch (err) {
+      r1 = err;
+    }
+
+    try {
+      r2 = await resolver.resolve(host);
+    } catch (err) {
+      r2 = err;
+    }
+
+    t.log(r1);
+    t.log(r2);
+
     // see explanation below regarding this under "A" and "AAAA" in switch/case
     if (!_.isError(r1)) r1 = r1.every((o) => isIPv4(o) || isIPv6(o));
     if (!_.isError(r2)) r2 = r2.every((o) => isIPv4(o) || isIPv6(o));
