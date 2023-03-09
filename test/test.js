@@ -16,6 +16,9 @@ const { Resolver } = dns.promises;
 // NOTE: tests won't work if you're behind a VPN with DNS blackholed
 //
 test.before(async (t) => {
+  // log the hosts (useful for debugging)
+  t.log('hosts', Tangerine.HOSTS);
+
   // attempt to setServers and perform a DNS lookup
   const tangerine = new Tangerine();
   const resolver = new Resolver({ timeout: 3000, tries: 1 });
@@ -242,6 +245,10 @@ for (const host of [
   'foo.bar.localhost',
   '::1',
   '::0',
+  'fe00::0',
+  'ff00::0',
+  '192.168.1.1',
+  '255.255.255.0',
   '127.0.0.1',
   'forwardemail.net',
   'cloudflare.com',

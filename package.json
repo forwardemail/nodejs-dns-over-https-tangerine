@@ -23,6 +23,7 @@
     "p-timeout": "4",
     "p-wait-for": "3",
     "port-numbers": "^6.0.1",
+    "private-ip": "^3.0.0",
     "punycode": "^2.3.0",
     "semver": "^7.3.8"
   },

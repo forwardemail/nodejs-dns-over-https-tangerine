@@ -27,14 +27,6 @@ const pkg = require('./package.json');
 
 const debug = debuglog('tangerine');
 
-const hosts = new Hosts(
-  hostile
-    .get()
-    // this is necessary to match how dns c-ares parses the host file
-    .map((arr) => arr[0] + ' ' + arr[1].split(' ').reverse().join(' '))
-    .join('\n')
-);
-
 // dynamically import dohdec
 let dohdec;
 // eslint-disable-next-line unicorn/prefer-top-level-await
@@ -42,8 +34,23 @@ import('dohdec').then((obj) => {
   dohdec = obj;
 });
 
+// dynamically import private-ip
+let isPrivateIP;
+// eslint-disable-next-line unicorn/prefer-top-level-await
+import('private-ip').then((obj) => {
+  isPrivateIP = obj.default;
+});
+
 // <https://github.com/szmarczak/cacheable-lookup/pull/76>
 class Tangerine extends dns.promises.Resolver {
+  static HOSTS = new Hosts(
+    hostile
+      .get()
+      // this is necessary to match how dns c-ares parses the host file
+      .map((arr) => arr[0] + ' ' + arr[1].split(' ').reverse().join(' '))
+      .join('\n')
+  );
+
   static isValidPort(port) {
     return Number.isSafeInteger(port) && port >= 0 && port <= 65535;
   }
@@ -664,7 +671,7 @@ class Tangerine extends dns.promises.Resolver {
     let resolve6;
 
     // sorted in reverse to match behavior of lookup
-    for (const rule of hosts._origin) {
+    for (const rule of this.constructor.HOSTS._origin) {
       if (
         rule.hostname.toLowerCase() !== name.toLowerCase() &&
         rule.ip !== name
@@ -933,9 +940,13 @@ class Tangerine extends dns.promises.Resolver {
     }
 
     // edge case where localhost IP returns matches
-    if (ip === '127.0.0.1' || ip === '::1') {
+    if (!isPrivateIP) await pWaitFor(() => Boolean(isPrivateIP));
+
+    if (ip === '::1' || ip === '127.0.0.1') return [];
+
+    if (isPrivateIP(ip)) {
       const answers = [];
-      for (const rule of hosts._origin) {
+      for (const rule of this.constructor.HOSTS._origin) {
         if (rule.ip === ip) {
           answers.push(rule.hostname);
           break;
