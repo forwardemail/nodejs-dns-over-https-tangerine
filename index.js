@@ -930,9 +930,12 @@ class Tangerine extends dns.promises.Resolver {
     const matches = [];
 
     for (const rule of this.constructor.HOSTS._origin) {
-      if (rule.ip === ip && !answers.includes(rule.hostname)) {
+      if (rule.ip === ip) {
         matches.push(rule.ip);
-        if (matches.filter((m) => m === ip).length > 1)
+        if (
+          matches.filter((m) => m === ip).length > 1 &&
+          !answers.includes(rule.hostname)
+        )
           answers.push(rule.hostname);
       }
     }
