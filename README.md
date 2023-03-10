@@ -58,6 +58,7 @@
   * [`tangerine.setServers(servers)`](#tangerinesetserversservers)
 * [Options](#options)
 * [Cache](#cache)
+* [Compatibility](#compatibility)
 * [Debugging](#debugging)
 * [Benchmarks](#benchmarks)
   * [Tangerine Benchmarks](#tangerine-benchmarks)
@@ -428,6 +429,15 @@ await tangerine.resolve('forwardemail.net'); // uses cached value
 ```
 
 This purge cache feature is useful for DNS records that have recently changed and have had their caches purged at the relevant DNS provider (e.g. [Cloudflare's Purge Cache tool](https://1.1.1.1/purge-cache/)).
+
+
+## Compatibility
+
+The only known compatibility issue is for locally running DNS servers that have wildcard DNS matching.
+
+If you are using `dnsmasq` with a wildcard match on "localhost" to "127.0.0.1", then the results may vary.  For example, if your `dnsmasq` configuration has `address=/localhost/127.0.0.1`, then any match of `localhost` will resolve to `127.0.0.1`.  This means that `dns.promises.lookup('foo.localhost')` will return `127.0.0.1` – however with :tangerine: Tangerine it will not return a value.
+
+The reason is because :tangerine: Tangerine only looks at either `/etc/hosts` (macOS/Linux) and `C:/Windows/System32/drivers/etc/hosts` (Windows).  It does not lookup BIND, dnsmasq, or other configurations running locally.  We would welcome a PR to resolve this (see `isCI` usage in test folder) – however it is a non-issue, as the workaround is to simply append a new line to the hostfile of `127.0.0.1 foo.localhost`.
 
 
 ## Debugging
