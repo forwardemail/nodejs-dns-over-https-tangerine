@@ -1,4 +1,5 @@
 const dns = require('node:dns');
+const fs = require('node:fs');
 const { Buffer } = require('node:buffer');
 const { isIP, isIPv4, isIPv6 } = require('node:net');
 
@@ -16,6 +17,22 @@ const { Resolver } = dns.promises;
 // NOTE: tests won't work if you're behind a VPN with DNS blackholed
 //
 test.before(async (t) => {
+  // echo the output of `/etc/dnsmasq.conf`
+  try {
+    t.log('/etc/dnsmasq.conf');
+    t.log(fs.readFileSync('/etc/dnsmasq.conf'));
+  } catch (err) {
+    t.log(err);
+  }
+
+  // echo the output of `/usr/local/etc/dnsmasq.d/localhost.conf`
+  try {
+    t.log('/usr/local/etc/dnsmasq.d/localhost.conf');
+    t.log(fs.readFileSync('/usr/local/etc/dnsmasq.d/localhost.conf'));
+  } catch (err) {
+    t.log(err);
+  }
+
   // log the hosts (useful for debugging)
   t.log(Tangerine.HOSTFILE);
 
