@@ -623,6 +623,15 @@ class Tangerine extends dns.promises.Resolver {
       throw err;
     }
 
+    if (name === '.') {
+      const err = this.constructor.createError(name, '', dns.NOTFOUND);
+      // remap and perform syscall
+      err.syscall = 'getaddrinfo';
+      err.message = err.message.replace('query', 'getaddrinfo');
+      err.errno = -3008;
+      throw err;
+    }
+
     // purge cache support
     let purgeCache;
     if (options?.purgeCache) {
@@ -669,13 +678,10 @@ class Tangerine extends dns.promises.Resolver {
     let resolve4;
     let resolve6;
 
-    // sorted in reverse to match behavior of lookup
+    const lower = name.toLowerCase();
+
     for (const rule of this.constructor.HOSTS._origin) {
-      if (
-        rule.hostname.toLowerCase() !== name.toLowerCase() &&
-        rule.ip !== name
-      )
-        continue;
+      if (rule.hostname.toLowerCase() !== lower && rule.ip !== name) continue;
       const type = isIP(rule.ip);
       if (!resolve4 && type === 4) {
         if (!Array.isArray(resolve4)) resolve4 = [rule.ip];
@@ -686,12 +692,8 @@ class Tangerine extends dns.promises.Resolver {
       }
     }
 
-    // if no matches found for resolve4 and resolve6 and it was localhost
-    // (this is a safeguard in case host file is missing these)
-    if (
-      name.toLowerCase() === 'localhost' ||
-      name.toLowerCase() === 'localhost.'
-    ) {
+    // safeguard (matches c-ares)
+    if (lower === 'localhost' || lower === 'localhost.') {
       if (!resolve4) resolve4 = ['127.0.0.1'];
       if (!resolve6) resolve6 = ['::1'];
     }
@@ -743,25 +745,6 @@ class Tangerine extends dns.promises.Resolver {
       err.errno = -3008;
       throw err;
     }
-
-    /*
-      //
-      // NOTE: we probably should handle this differently (?)
-      //       (not sure what native nodejs dns module does for different errors - haven't checked yet)
-      //
-      if (errors.every((e) => e.code !== 'ENODATA')) {
-        const err = this.constructor.combineErrors(errors);
-        err.hostname = name;
-        // remap and perform syscall
-        err.syscall = 'getaddrinfo';
-        err.message = err.message.replace('query', 'getaddrinfo');
-        if (!err.code)
-          err.code = errors.find((e) => e.code)?.code || dns.BADRESP;
-        if (!err.errno)
-          err.errno = errors.find((e) => e.errno)?.errno || undefined;
-        throw err;
-      }
-      */
 
     // default node behavior seems to return IPv4 by default always regardless
     if (answers.length > 0)
@@ -1457,7 +1440,7 @@ class Tangerine extends dns.promises.Resolver {
 
     // edge case where c-ares detects "." as start of string
     // <https://github.com/c-ares/c-ares/blob/38b30bc922c21faa156939bde15ea35332c30e08/src/lib/ares_getaddrinfo.c#L829>
-    if (name.startsWith('.') || name.includes('..'))
+    if (name !== '.' && (name.startsWith('.') || name.includes('..')))
       throw this.constructor.createError(name, rrtype, dns.BADNAME);
 
     // purge cache support
