@@ -17,10 +17,7 @@ const { Resolver } = dns.promises;
 //
 test.before(async (t) => {
   // log the hosts (useful for debugging)
-  t.log('hostfile');
   t.log(Tangerine.HOSTFILE);
-  t.log('parsed hosts');
-  t.log(Tangerine.HOSTS);
 
   // attempt to setServers and perform a DNS lookup
   const tangerine = new Tangerine();
@@ -243,6 +240,7 @@ for (const host of [
   '.,',
   'localhost..',
   'beep..',
+  'beep.com',
   'beep.com..',
   'beep..com..',
   'foo..com',

@@ -20,7 +20,6 @@ const pWaitFor = require('p-wait-for');
 const packet = require('dns-packet');
 const semver = require('semver');
 const structuredClone = require('@ungap/structured-clone').default;
-const { Hosts } = require('hosts-parser');
 const { getService } = require('port-numbers');
 
 const pkg = require('./package.json');
@@ -41,19 +40,24 @@ import('private-ip').then((obj) => {
   isPrivateIP = obj.default;
 });
 
+const HOSTFILE = hostile
+  .get(true)
+  .map((s) => (Array.isArray(s) ? s.join(' ') : s))
+  .join('\n');
+
+const HOSTS = [];
+const hosts = hostile.get();
+for (const line of hosts) {
+  const [ip, str] = line;
+  const hosts = str.split(' ');
+  HOSTS.push({ ip, hosts });
+}
+
 // <https://github.com/szmarczak/cacheable-lookup/pull/76>
 class Tangerine extends dns.promises.Resolver {
-  static HOSTFILE = hostile
-    .get(true)
-    .map((s) => (Array.isArray(s) ? s.join(' ') : s))
-    .join('\n');
+  static HOSTFILE = HOSTFILE;
 
-  static HOSTS = new Hosts(
-    hostile
-      .get()
-      .map((arr) => arr.join(' '))
-      .join('\n')
-  );
+  static HOSTS = HOSTS;
 
   static isValidPort(port) {
     return Number.isSafeInteger(port) && port >= 0 && port <= 65535;
@@ -686,8 +690,8 @@ class Tangerine extends dns.promises.Resolver {
 
     const lower = name.toLowerCase();
 
-    for (const rule of this.constructor.HOSTS._origin) {
-      if (rule.hostname.toLowerCase() !== lower && rule.ip !== name) continue;
+    for (const rule of this.constructor.HOSTS) {
+      if (rule.hosts.every((h) => h.toLowerCase() !== lower)) continue;
       const type = isIP(rule.ip);
       if (!resolve4 && type === 4) {
         if (!Array.isArray(resolve4)) resolve4 = [rule.ip];
@@ -930,25 +934,22 @@ class Tangerine extends dns.promises.Resolver {
     // edge case where localhost IP returns matches
     if (!isPrivateIP) await pWaitFor(() => Boolean(isPrivateIP));
 
-    const answers = [];
-    const matches = [];
+    const answers = new Set();
+    let match = false;
 
-    for (const rule of this.constructor.HOSTS._origin) {
+    for (const rule of this.constructor.HOSTS) {
       if (rule.ip === ip) {
-        matches.push(rule.ip);
-        if (
-          matches.filter((m) => m === ip).length > 1 &&
-          !answers.includes(rule.hostname)
-        )
-          answers.push(rule.hostname);
+        match = true;
+        for (const host of rule.hosts.slice(1)) {
+          answers.add(host);
+        }
       }
     }
 
-    // if (answers.length > 0 || (matches.includes(ip) && isPrivateIP(ip)))
-    if (answers.length > 0 || matches.includes(ip)) return answers;
+    if (answers.size > 0 || match) return [...answers];
 
     // NOTE: we can prob remove this (?)
-    if (ip === '::1' || ip === '127.0.0.1') return [];
+    // if (ip === '::1' || ip === '127.0.0.1') return [];
 
     // reverse the IP address
     if (!dohdec) await pWaitFor(() => Boolean(dohdec));
