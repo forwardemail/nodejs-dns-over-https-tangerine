@@ -628,7 +628,7 @@ class Tangerine extends dns.promises.Resolver {
       // remap and perform syscall
       err.syscall = 'getaddrinfo';
       err.message = err.message.replace('query', 'getaddrinfo');
-      err.errno = -3008;
+      err.errno = -3007;
       throw err;
     }
 
