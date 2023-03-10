@@ -43,7 +43,10 @@ import('private-ip').then((obj) => {
 
 // <https://github.com/szmarczak/cacheable-lookup/pull/76>
 class Tangerine extends dns.promises.Resolver {
-  static HOSTFILE = hostile.get(true).join('\n');
+  static HOSTFILE = hostile
+    .get(true)
+    .map((s) => (Array.isArray(s) ? s.join(' ') : s))
+    .join('\n');
 
   static HOSTS = new Hosts(
     hostile
@@ -927,8 +930,6 @@ class Tangerine extends dns.promises.Resolver {
     // edge case where localhost IP returns matches
     if (!isPrivateIP) await pWaitFor(() => Boolean(isPrivateIP));
 
-    if (ip === '::1' || ip === '127.0.0.1') return [];
-
     const answers = [];
     const matches = [];
 
@@ -945,6 +946,9 @@ class Tangerine extends dns.promises.Resolver {
 
     // if (answers.length > 0 || (matches.includes(ip) && isPrivateIP(ip)))
     if (answers.length > 0 || matches.includes(ip)) return answers;
+
+    // NOTE: we can prob remove this (?)
+    if (ip === '::1' || ip === '127.0.0.1') return [];
 
     // reverse the IP address
     if (!dohdec) await pWaitFor(() => Boolean(dohdec));
