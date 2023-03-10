@@ -46,8 +46,7 @@ class Tangerine extends dns.promises.Resolver {
   static HOSTS = new Hosts(
     hostile
       .get()
-      // this is necessary to match how dns c-ares parses the host file
-      .map((arr) => arr[0] + ' ' + arr[1].split(' ').reverse().join(' '))
+      .map((arr) => arr.join(' '))
       .join('\n')
   );
 
@@ -679,11 +678,11 @@ class Tangerine extends dns.promises.Resolver {
         continue;
       const type = isIP(rule.ip);
       if (!resolve4 && type === 4) {
-        if (!Array.isArray(resolve4)) resolve4 = [];
-        resolve4.push([rule.ip]);
+        if (!Array.isArray(resolve4)) resolve4 = [rule.ip];
+        else if (!resolve4.includes(rule.ip)) resolve4.push([rule.ip]);
       } else if (!resolve6 && type === 6) {
-        if (!Array.isArray(resolve6)) resolve6 = [];
-        resolve6.push(rule.ip);
+        if (!Array.isArray(resolve6)) resolve6 = [rule.ip];
+        else if (!resolve6.includes(rule.ip)) resolve6.push(rule.ip);
       }
     }
 
@@ -944,17 +943,19 @@ class Tangerine extends dns.promises.Resolver {
 
     if (ip === '::1' || ip === '127.0.0.1') return [];
 
-    if (isPrivateIP(ip)) {
-      const answers = [];
-      for (const rule of this.constructor.HOSTS._origin) {
-        if (rule.ip === ip) {
-          answers.push(rule.hostname);
-          break;
-        }
-      }
+    const answers = [];
+    const matches = [];
 
-      return answers;
+    for (const rule of this.constructor.HOSTS._origin) {
+      if (rule.ip === ip && !answers.includes(rule.hostname)) {
+        matches.push(rule.ip);
+        if (matches.filter((m) => m === ip).length > 1)
+          answers.push(rule.hostname);
+      }
     }
+
+    if (answers.length > 0 || (matches.includes(ip) && isPrivateIP(ip)))
+      return answers;
 
     // reverse the IP address
     if (!dohdec) await pWaitFor(() => Boolean(dohdec));
