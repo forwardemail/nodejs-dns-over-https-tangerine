@@ -311,6 +311,7 @@ class Tangerine extends dns.promises.Resolver {
   ]);
 
   static RETRY_ERROR_CODES = new Set([
+    'ETIMEOUT',
     'ETIMEDOUT',
     'ECONNRESET',
     'EADDRINUSE',
