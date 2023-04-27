@@ -921,31 +921,30 @@ test('resolveCert', async (t) => {
 
 // similar edge case as resolveCert above, but for resolveTlsa
 // <https://github.com/internetstandards/toolbox-wiki/blob/main/DANE-for-SMTP-how-to.md>
-if (!isCI)
-  test('resolveTlsa', async (t) => {
-    const tangerine = new Tangerine();
+test('resolveTlsa', async (t) => {
+  const tangerine = new Tangerine();
 
-    let r1;
-    try {
-      r1 = await tangerine.resolveTlsa('_25._tcp.internet.nl');
-    } catch (err) {
-      r1 = err;
-    }
+  let r1;
+  try {
+    r1 = await tangerine.resolveTlsa('_25._tcp.internet.nl');
+  } catch (err) {
+    r1 = err;
+  }
 
-    t.assert(
-      r1.length > 0,
-      "Couldn't resolve TLSA record for _25._tcp.internet.nl!"
-    );
+  t.assert(
+    r1.length > 0,
+    "Couldn't resolve TLSA record for _25._tcp.internet.nl!"
+  );
 
-    t.log(r1);
+  t.log(r1);
 
-    for (const d of r1) {
-      t.assert(typeof d === 'object', 'must be an object');
-      t.assert(typeof d.name === 'string', 'name missing');
-      t.assert(typeof d.ttl === 'number', 'ttl missing');
-      t.assert(typeof d.usage === 'number', 'usage missing');
-      t.assert(typeof d.selector === 'number', 'selector missing');
-      t.assert(typeof d.mtype === 'number', 'mtype missing');
-      t.assert(Buffer.isBuffer(d.cert), 'cert must be buffer');
-    }
-  });
+  for (const d of r1) {
+    t.assert(typeof d === 'object', 'must be an object');
+    t.assert(typeof d.name === 'string', 'name missing');
+    t.assert(typeof d.ttl === 'number', 'ttl missing');
+    t.assert(typeof d.usage === 'number', 'usage missing');
+    t.assert(typeof d.selector === 'number', 'selector missing');
+    t.assert(typeof d.mtype === 'number', 'mtype missing');
+    t.assert(Buffer.isBuffer(d.cert), 'cert must be buffer');
+  }
+});
