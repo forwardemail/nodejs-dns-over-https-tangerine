@@ -1847,24 +1847,30 @@ class Tangerine extends dns.promises.Resolver {
         // if it returns answers with `type: TLSA` then recursively lookup
         // 3 1 1 D6FEA64D4E68CAEAB7CBB2E0F905D7F3CA3308B12FD88C5B469F08AD 7E05C7C7
         return result.answers.map((answer) => {
-          if (!Buffer.isBuffer(answer.data)) {
-            console.log('BUFFER DATA');
-            console.log('answer', answer);
-            console.log('answer.data', answer.data);
-            console.log(JSON.stringify(answer, null, 2));
-            throw new Error('Buffer was not available');
-          }
+          const obj = {
+            name: answer.name,
+            ttl: answer.ttl
+          };
 
           // <https://www.mailhardener.com/kb/dane>
-          return {
-            name: answer.name,
-            ttl: answer.ttl,
-            // <https://github.com/rthalley/dnspython/blob/98b12e9e43847dac615bb690355d2fabaff969d2/dns/rdtypes/tlsabase.py#L35>
-            usage: answer.data.subarray(0, 1).readUInt8(),
-            selector: answer.data.subarray(1, 2).readUInt8(),
-            mtype: answer.data.subarray(2, 3).readUInt8(),
-            cert: answer.data.subarray(3)
-          };
+          // <https://github.com/rthalley/dnspython/blob/98b12e9e43847dac615bb690355d2fabaff969d2/dns/rdtypes/tlsabase.py#L35>
+          if (Buffer.isBuffer(answer.data)) {
+            obj.usage = answer.data.subarray(0, 1).readUInt8();
+            obj.selector = answer.data.subarray(1, 2).readUInt8();
+            obj.mtype = answer.data.subarray(2, 3).readUInt8();
+            obj.cert = answer.data.subarray(3);
+          } else {
+            obj.usage = answer.data.usage;
+            obj.selector = answer.data.selector;
+            obj.mtype = answer.data.matchingType;
+            obj.cert = answer.data.certificate;
+          }
+
+          // aliases to match Cloudflare DNS response
+          obj.matchingType = obj.mtype;
+          obj.certificate = obj.cert;
+
+          return obj;
         });
       }
 
