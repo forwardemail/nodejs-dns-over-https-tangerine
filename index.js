@@ -1847,8 +1847,13 @@ class Tangerine extends dns.promises.Resolver {
         // if it returns answers with `type: TLSA` then recursively lookup
         // 3 1 1 D6FEA64D4E68CAEAB7CBB2E0F905D7F3CA3308B12FD88C5B469F08AD 7E05C7C7
         return result.answers.map((answer) => {
-          if (!Buffer.isBuffer(answer.data))
+          if (!Buffer.isBuffer(answer.data)) {
+            console.log('BUFFER DATA');
+            console.log('answer', answer);
+            console.log('answer.data', answer.data);
+            console.log(JSON.stringify(answer, null, 2));
             throw new Error('Buffer was not available');
+          }
 
           // <https://www.mailhardener.com/kb/dane>
           return {
