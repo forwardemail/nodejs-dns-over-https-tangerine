@@ -1428,6 +1428,74 @@ class Tangerine extends dns.promises.Resolver {
     this.options.servers = new Set(servers);
   }
 
+  spoofPacket(name, rrtype, answers = []) {
+    if (typeof name !== 'string') {
+      const err = new TypeError('The "name" argument must be of type string.');
+      err.code = 'ERR_INVALID_ARG_TYPE';
+      throw err;
+    }
+
+    if (typeof rrtype !== 'string') {
+      const err = new TypeError(
+        'The "rrtype" argument must be of type string.'
+      );
+      err.code = 'ERR_INVALID_ARG_TYPE';
+      throw err;
+    }
+
+    if (!this.constructor.TYPES.has(rrtype)) {
+      const err = new TypeError("The argument 'rrtype' is invalid.");
+      err.code = 'ERR_INVALID_ARG_VALUE';
+      throw err;
+    }
+
+    if (!Array.isArray(answers)) {
+      const err = new TypeError("The argument 'answers' is invalid.");
+      err.code = 'ERR_INVALID_ARG_VALUE';
+      throw err;
+    }
+
+    return {
+      id: 0,
+      type: 'response',
+      flags: 384,
+      flag_qr: true,
+      opcode: 'QUERY',
+      flag_aa: false,
+      flag_tc: false,
+      flag_rd: true,
+      flag_ra: true,
+      flag_z: false,
+      flag_ad: false,
+      flag_cd: false,
+      rcode: 'NOERROR',
+      questions: [{ name, type: rrtype, class: 'IN' }],
+      answers: answers.map((answer) => ({
+        name,
+        type: rrtype,
+        ttl: 300,
+        class: 'IN',
+        flush: false,
+        data: rrtype === 'TXT' ? [answer] : answer
+      })),
+      authorities: [],
+      additionals: [
+        {
+          name: '.',
+          type: 'OPT',
+          udpPayloadSize: 1232,
+          extendedRcode: 0,
+          ednsVersion: 0,
+          flags: 0,
+          flag_do: false,
+          options: [Array]
+        }
+      ],
+      ttl: 300,
+      expires: Date.now() + 10000
+    };
+  }
+
   // eslint-disable-next-line complexity
   async resolve(name, rrtype = 'A', options = {}, abortController) {
     if (typeof name !== 'string') {
@@ -1481,6 +1549,17 @@ class Tangerine extends dns.promises.Resolver {
       //       (this saves us from duplicating the same `...sort().filter(Number.isFinite)` logic)
       //
       data = await this.options.cache.get(key);
+      //
+      // if it's not an object then assume that
+      // the cache implementation does not have JSON.parse built-in
+      // and so we should try to parse it on our own (user-friendly)
+      //
+      if (typeof data === 'string') {
+        try {
+          data = JSON.parse(data);
+        } catch {}
+      }
+
       // safeguard in case cache pollution
       if (data && typeof data === 'object') {
         debug('cache retrieved', key);

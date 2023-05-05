@@ -56,6 +56,7 @@
   * [`tangerine.reverse(ip[, abortController, purgeCache])`](#tangerinereverseip-abortcontroller-purgecache)
   * [`tangerine.setDefaultResultOrder(order)`](#tangerinesetdefaultresultorderorder)
   * [`tangerine.setServers(servers)`](#tangerinesetserversservers)
+  * [`tangerine.spoofPacket(hostname, rrtype, answers)`](#tangerinespoofpackethostname-rrtype-answers)
 * [Options](#options)
 * [Cache](#cache)
 * [Compatibility](#compatibility)
@@ -330,6 +331,48 @@ This mirrors output from <https://github.com/rthalley/dnspython>.
 ### `tangerine.setDefaultResultOrder(order)`
 
 ### `tangerine.setServers(servers)`
+
+### `tangerine.spoofPacket(hostname, rrtype, answers)`
+
+This method is useful for writing tests to spoof DNS packets in-memory.
+
+The `rrtype` must be either `"TXT"` or `"MX"`, and `answers` must be an Array of DNS resource record answers.
+
+For example, if you want to spoof TXT and MX records:
+
+```js
+const Redis = require('ioredis-mock');
+const Tangerine = require('tangerine');
+const ip = require('ip');
+
+const cache = new Redis();
+const tangerine = new Tangerine({ cache });
+
+const obj = {};
+
+obj['txt:forwardmail.net'] = tangerine.spoofPacket('forwardmail.net', 'TXT', [
+  `v=spf1 ip4:${ip.address()} -all`
+]);
+
+obj['mx:forwardemail.net'] = tangerine.spoofPacket('forwardemail.net', 'MX', [
+  { exchange: 'mx1.forwardemail.net', preference: 0 },
+  { exchange: 'mx2.forwardemail.net', preference: 0 }
+]);
+
+await cache.mset(obj);
+
+//
+// NOTE: spoofed values are used below (this means no DNS query performed)
+//
+
+const txt = await tangerine.resolveTxt('forwardemail.net');
+console.log('txt', txt);
+
+const mx = await tangerine.resolveMx('forwardemail.net');
+console.log('mx', mx);
+```
+
+**Pull requests are welcome to add support for other `rrtype` values for this method.**
 
 
 ## Options

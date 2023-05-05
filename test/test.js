@@ -948,3 +948,68 @@ test('resolveTlsa', async (t) => {
     t.assert(Buffer.isBuffer(d.cert), 'cert must be buffer');
   }
 });
+
+test('spoofPacket', async (t) => {
+  const cache = new Redis();
+  const tangerine = new Tangerine({ cache });
+
+  const txt = tangerine.spoofPacket('forwardemail.net', 'TXT', [
+    `v=spf1 ip4:127.0.0.1 -all`
+  ]);
+
+  t.deepEqual(txt.answers, [
+    {
+      name: 'forwardemail.net',
+      type: 'TXT',
+      ttl: 300,
+      class: 'IN',
+      flush: false,
+      data: ['v=spf1 ip4:127.0.0.1 -all']
+    }
+  ]);
+
+  await cache.set('txt:forwardemail.net', JSON.stringify(txt));
+
+  const txtDns = await tangerine.resolveTxt('forwardemail.net');
+
+  t.deepEqual(txtDns, [['v=spf1 ip4:127.0.0.1 -all']]);
+
+  const mx = tangerine.spoofPacket('forwardemail.net', 'MX', [
+    { exchange: 'mx1.forwardemail.net', preference: 0 },
+    { exchange: 'mx2.forwardemail.net', preference: 0 }
+  ]);
+
+  t.deepEqual(mx.answers, [
+    {
+      name: 'forwardemail.net',
+      type: 'MX',
+      ttl: 300,
+      class: 'IN',
+      flush: false,
+      data: {
+        preference: 0,
+        exchange: 'mx1.forwardemail.net'
+      }
+    },
+    {
+      name: 'forwardemail.net',
+      type: 'MX',
+      ttl: 300,
+      class: 'IN',
+      flush: false,
+      data: {
+        preference: 0,
+        exchange: 'mx2.forwardemail.net'
+      }
+    }
+  ]);
+
+  await cache.set('mx:forwardemail.net', JSON.stringify(mx));
+
+  const mxDns = await tangerine.resolveMx('forwardemail.net');
+
+  t.deepEqual(mxDns, [
+    { exchange: 'mx1.forwardemail.net', priority: 0 },
+    { exchange: 'mx2.forwardemail.net', priority: 0 }
+  ]);
+});
