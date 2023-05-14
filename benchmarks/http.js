@@ -1,6 +1,5 @@
 const http = require('node:http');
 const process = require('node:process');
-
 const Benchmark = require('benchmark');
 const axios = require('axios');
 const fetch = require('node-fetch');

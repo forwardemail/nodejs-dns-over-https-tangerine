@@ -2,14 +2,12 @@ const dns = require('node:dns');
 const fs = require('node:fs');
 const { Buffer } = require('node:buffer');
 const { isIP, isIPv4, isIPv6 } = require('node:net');
-
 const isCI = require('is-ci');
 const Redis = require('ioredis-mock');
 const _ = require('lodash');
 const got = require('got');
 const sortKeys = require('sort-keys');
 const test = require('ava');
-
 const Tangerine = require('..');
 
 const { Resolver } = dns.promises;
@@ -947,6 +945,66 @@ test('resolveTlsa', async (t) => {
     t.assert(typeof d.mtype === 'number', 'mtype missing');
     t.assert(Buffer.isBuffer(d.cert), 'cert must be buffer');
   }
+});
+
+test('spoofPacket with json', async (t) => {
+  const cache = new Redis();
+  const tangerine = new Tangerine({ cache });
+
+  const txt = tangerine.spoofPacket(
+    'forwardemail.net',
+    'TXT',
+    [`v=spf1 ip4:127.0.0.1 -all`],
+    true
+  );
+
+  t.deepEqual(_.omit(JSON.parse(txt), ['expires']), {
+    id: 0,
+    type: 'response',
+    flags: 384,
+    flag_qr: true,
+    opcode: 'QUERY',
+    flag_aa: false,
+    flag_tc: false,
+    flag_rd: true,
+    flag_ra: true,
+    flag_z: false,
+    flag_ad: false,
+    flag_cd: false,
+    rcode: 'NOERROR',
+    questions: [{ name: 'forwardemail.net', type: 'TXT', class: 'IN' }],
+    answers: [
+      {
+        name: 'forwardemail.net',
+        type: 'TXT',
+        ttl: 300,
+        class: 'IN',
+        flush: false,
+        data: ['v=spf1 ip4:127.0.0.1 -all']
+      }
+    ],
+    authorities: [],
+    additionals: [
+      {
+        name: '.',
+        type: 'OPT',
+        udpPayloadSize: 1232,
+        extendedRcode: 0,
+        ednsVersion: 0,
+        flags: 0,
+        flag_do: false,
+        options: [null]
+      }
+    ],
+    ttl: 300
+    // expires: 1684087106042
+  });
+
+  await cache.set('txt:forwardemail.net', txt);
+
+  const txtDns = await tangerine.resolveTxt('forwardemail.net');
+
+  t.deepEqual(txtDns, [['v=spf1 ip4:127.0.0.1 -all']]);
 });
 
 test('spoofPacket', async (t) => {

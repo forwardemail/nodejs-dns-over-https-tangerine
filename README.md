@@ -51,12 +51,12 @@
   * [`tangerine.resolveSoa(hostname[, options, abortController]))`](#tangerineresolvesoahostname-options-abortcontroller)
   * [`tangerine.resolveSrv(hostname[, options, abortController]))`](#tangerineresolvesrvhostname-options-abortcontroller)
   * [`tangerine.resolveTxt(hostname[, options, abortController]))`](#tangerineresolvetxthostname-options-abortcontroller)
-  * [`tangerine.resolveCert(hostname, [, options, abortController]))`](#tangerineresolvecerthostname--options-abortcontroller)
-  * [`tangerine.resolveTlsa(hostname, [, options, abortController]))`](#tangerineresolvetlsahostname--options-abortcontroller)
+  * [`tangerine.resolveCert(hostname[, options, abortController]))`](#tangerineresolvecerthostname-options-abortcontroller)
+  * [`tangerine.resolveTlsa(hostname[, options, abortController]))`](#tangerineresolvetlsahostname-options-abortcontroller)
   * [`tangerine.reverse(ip[, abortController, purgeCache])`](#tangerinereverseip-abortcontroller-purgecache)
   * [`tangerine.setDefaultResultOrder(order)`](#tangerinesetdefaultresultorderorder)
   * [`tangerine.setServers(servers)`](#tangerinesetserversservers)
-  * [`tangerine.spoofPacket(hostname, rrtype, answers)`](#tangerinespoofpackethostname-rrtype-answers)
+  * [`tangerine.spoofPacket(hostname, rrtype, answers[, json])`](#tangerinespoofpackethostname-rrtype-answers-json)
 * [Options](#options)
 * [Cache](#cache)
 * [Compatibility](#compatibility)
@@ -274,7 +274,7 @@ Tangerine supports a new `ecsSubnet` property in the `options` Object argument.
 
 ### `tangerine.resolveTxt(hostname[, options, abortController]))`
 
-### `tangerine.resolveCert(hostname, [, options, abortController]))`
+### `tangerine.resolveCert(hostname[, options, abortController]))`
 
 This function returns a Promise that resolves with an Array with parsed values from results:
 
@@ -293,7 +293,7 @@ This function returns a Promise that resolves with an Array with parsed values f
 
 This mirrors output from <https://github.com/rthalley/dnspython>.
 
-### `tangerine.resolveTlsa(hostname, [, options, abortController]))`
+### `tangerine.resolveTlsa(hostname[, options, abortController]))`
 
 This method was added for DANE and TLSA support.  See this [excellent article](https://www.mailhardener.com/kb/dane), [index.js](https://github.com/forwardemail/tangerine/blob/main/index.js), and <https://github.com/nodejs/node/issues/39569> for more insight.
 
@@ -332,11 +332,13 @@ This mirrors output from <https://github.com/rthalley/dnspython>.
 
 ### `tangerine.setServers(servers)`
 
-### `tangerine.spoofPacket(hostname, rrtype, answers)`
+### `tangerine.spoofPacket(hostname, rrtype, answers[, json])`
 
 This method is useful for writing tests to spoof DNS packets in-memory.
 
 The `rrtype` must be either `"TXT"` or `"MX"`, and `answers` must be an Array of DNS resource record answers.
+
+If you pass `json` as `true`, then value returned will be converted to JSON via `JSON.stringify`.
 
 For example, if you want to spoof TXT and MX records:
 

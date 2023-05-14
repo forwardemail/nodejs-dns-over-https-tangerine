@@ -6,9 +6,7 @@ const { Buffer } = require('node:buffer');
 const { debuglog } = require('node:util');
 const { getEventListeners, setMaxListeners } = require('node:events');
 const { isIP, isIPv4, isIPv6 } = require('node:net');
-
 const { toASCII } = require('punycode/');
-
 const autoBind = require('auto-bind');
 const getStream = require('get-stream');
 const hostile = require('hostile');
@@ -21,7 +19,6 @@ const packet = require('dns-packet');
 const semver = require('semver');
 const structuredClone = require('@ungap/structured-clone').default;
 const { getService } = require('port-numbers');
-
 const pkg = require('./package.json');
 
 const debug = debuglog('tangerine');
@@ -123,21 +120,21 @@ class Tangerine extends dns.promises.Resolver {
 
       // if all errors had `name` and they were all the same then preserve it
       if (
-        typeof errors[0].name !== 'undefined' &&
+        errors[0].name !== undefined &&
         errors.every((e) => e.name === errors[0].name)
       )
         err.name = errors[0].name;
 
       // if all errors had `code` and they were all the same then preserve it
       if (
-        typeof errors[0].code !== 'undefined' &&
+        errors[0].code !== undefined &&
         errors.every((e) => e.code === errors[0].code)
       )
         err.code = errors[0].code;
 
       // if all errors had `errno` and they were all the same then preserve it
       if (
-        typeof errors[0].errno !== 'undefined' &&
+        errors[0].errno !== undefined &&
         errors.every((e) => e.errno === errors[0].errno)
       )
         err.errno = errors[0].errno;
@@ -607,7 +604,7 @@ class Tangerine extends dns.promises.Resolver {
 
       options = { family: options };
     } else if (
-      typeof options?.family !== 'undefined' &&
+      options?.family !== undefined &&
       ![0, 4, 6, 'IPv4', 'IPv6'].includes(options.family)
     ) {
       // validate family
@@ -761,7 +758,7 @@ class Tangerine extends dns.promises.Resolver {
     if (answers.length > 0)
       answers =
         answers[0].length > 0 &&
-        (typeof options.family === 'undefined' || options.family === 0)
+        (options.family === undefined || options.family === 0)
           ? answers[0]
           : answers.flat();
 
@@ -1428,7 +1425,7 @@ class Tangerine extends dns.promises.Resolver {
     this.options.servers = new Set(servers);
   }
 
-  spoofPacket(name, rrtype, answers = []) {
+  spoofPacket(name, rrtype, answers = [], json = false) {
     if (typeof name !== 'string') {
       const err = new TypeError('The "name" argument must be of type string.');
       err.code = 'ERR_INVALID_ARG_TYPE';
@@ -1455,7 +1452,7 @@ class Tangerine extends dns.promises.Resolver {
       throw err;
     }
 
-    return {
+    const obj = {
       id: 0,
       type: 'response',
       flags: 384,
@@ -1494,6 +1491,8 @@ class Tangerine extends dns.promises.Resolver {
       ttl: 300,
       expires: Date.now() + 10000
     };
+
+    return json ? JSON.stringify(obj) : obj;
   }
 
   // eslint-disable-next-line complexity
@@ -1909,11 +1908,10 @@ class Tangerine extends dns.promises.Resolver {
               algorithm: answer.data.subarray(4, 5).readUInt8(),
               certificate: answer.data.subarray(5).toString('base64')
             };
-            obj.certificate_type = this.constructor.CTYPE_BY_VALUE[
-              obj.certificate_type
-            ]
-              ? this.constructor.CTYPE_BY_VALUE[obj.certificate_type]
-              : obj.certificate_type.toString();
+            if (this.constructor.CTYPE_BY_VALUE[obj.certificate_type])
+              obj.certificate_type =
+                this.constructor.CTYPE_BY_VALUE[obj.certificate_type];
+            else obj.certificate_type = obj.certificate_type.toString();
             return obj;
           } catch (err) {
             this.options.logger.error(err, { name, rrtype, options, answer });

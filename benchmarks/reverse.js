@@ -1,7 +1,5 @@
 const dns = require('node:dns');
-
 const Benchmark = require('benchmark');
-
 const Tangerine = require('..');
 
 const opts = { timeout: 5000, tries: 1 };
