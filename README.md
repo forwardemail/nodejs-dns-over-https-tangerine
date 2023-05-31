@@ -56,7 +56,7 @@
   * [`tangerine.reverse(ip[, abortController, purgeCache])`](#tangerinereverseip-abortcontroller-purgecache)
   * [`tangerine.setDefaultResultOrder(order)`](#tangerinesetdefaultresultorderorder)
   * [`tangerine.setServers(servers)`](#tangerinesetserversservers)
-  * [`tangerine.spoofPacket(hostname, rrtype, answers[, json])`](#tangerinespoofpackethostname-rrtype-answers-json)
+  * [`tangerine.spoofPacket(hostname, rrtype, answers[, json, expires = 30000])`](#tangerinespoofpackethostname-rrtype-answers-json-expires--30000)
 * [Options](#options)
 * [Cache](#cache)
 * [Compatibility](#compatibility)
@@ -332,13 +332,15 @@ This mirrors output from <https://github.com/rthalley/dnspython>.
 
 ### `tangerine.setServers(servers)`
 
-### `tangerine.spoofPacket(hostname, rrtype, answers[, json])`
+### `tangerine.spoofPacket(hostname, rrtype, answers[, json, expires = 30000])`
 
 This method is useful for writing tests to spoof DNS packets in-memory.
 
 The `rrtype` must be either `"TXT"` or `"MX"`, and `answers` must be an Array of DNS resource record answers.
 
 If you pass `json` as `true`, then value returned will be converted to JSON via `JSON.stringify`.
+
+The last argument `expires` can either be a `Date` or `Number`.  This is the value used for calculating the DNS packet expiration.  If it is a `Number`, then the `expires` value will be `Date.now() + expires`.  The default value is `30000`, which means it will expire in 30 seconds.
 
 For example, if you want to spoof TXT and MX records:
 

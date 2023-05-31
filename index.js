@@ -1425,7 +1425,8 @@ class Tangerine extends dns.promises.Resolver {
     this.options.servers = new Set(servers);
   }
 
-  spoofPacket(name, rrtype, answers = [], json = false) {
+  // eslint-disable-next-line max-params
+  spoofPacket(name, rrtype, answers = [], json = false, expires = 30000) {
     if (typeof name !== 'string') {
       const err = new TypeError('The "name" argument must be of type string.');
       err.code = 'ERR_INVALID_ARG_TYPE';
@@ -1489,7 +1490,8 @@ class Tangerine extends dns.promises.Resolver {
         }
       ],
       ttl: 300,
-      expires: Date.now() + 10000
+      expires:
+        expires instanceof Date ? expires.getTime() : Date.now() + expires
     };
 
     return json ? JSON.stringify(obj) : obj;
