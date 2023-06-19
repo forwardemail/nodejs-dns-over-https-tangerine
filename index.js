@@ -1956,7 +1956,7 @@ class Tangerine extends dns.promises.Resolver {
       default: {
         this.options.logger.error(
           new Error(
-            `Submit a PR at <https://github.com/forwardemail/tangerine> with proper parsing for ${rrtype} records.  You can reference <https://github.com/rthalley/dnspython/tree/master/dns/rdtypes/ANY> for inspiration.`
+            `Submit a PR at <https://github.com/forwardemail/nodejs-dns-over-https-tangerine> with proper parsing for ${rrtype} records.  You can reference <https://github.com/rthalley/dnspython/tree/master/dns/rdtypes/ANY> for inspiration.`
           )
         );
         return result.answers;

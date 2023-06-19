@@ -1,17 +1,17 @@
 <h1 align="center">
-  <a href="https://github.com/forwardemail/tangerine"><img src="https://raw.githubusercontent.com/forwardemail/tangerine/main/media/header.png" alt="Tangerine" /></a>
+  <a href="https://github.com/forwardemail/nodejs-dns-over-https-tangerine"><img src="https://raw.githubusercontent.com/forwardemail/nodejs-dns-over-https-tangerine/main/media/header.png" alt="Tangerine" /></a>
 </h1>
 <div align="center">
-  <a href="https://github.com/forwardemail/tangerine/actions/workflows/ci.yml"><img src="https://github.com/forwardemail/tangerine/actions/workflows/ci.yml/badge.svg" alt="build status" /></a>
+  <a href="https://github.com/forwardemail/nodejs-dns-over-https-tangerine/actions/workflows/ci.yml"><img src="https://github.com/forwardemail/nodejs-dns-over-https-tangerine/actions/workflows/ci.yml/badge.svg" alt="build status" /></a>
   <a href="https://github.com/sindresorhus/xo"><img src="https://img.shields.io/badge/code_style-XO-5ed9c7.svg" alt="code style" /></a>
   <a href="https://github.com/prettier/prettier"><img src="https://img.shields.io/badge/styled_with-prettier-ff69b4.svg" alt="styled with prettier" /></a>
   <a href="https://lass.js.org"><img src="https://img.shields.io/badge/made_with-lass-95CC28.svg" alt="made with lass" /></a>
-  <a href="LICENSE"><img src="https://img.shields.io/github/license/forwardemail/tangerine.svg" alt="license" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/forwardemail/nodejs-dns-over-https-tangerine.svg" alt="license" /></a>
   <a href="https://npm.im/tangerine"><img src="https://img.shields.io/npm/dt/tangerine.svg" alt="npm downloads" /></a>
 </div>
 <br />
 <div align="center">
-  🍊 <a href="https://github.com/forwardemail/tangerine" target="_blank">Tangerine</a> is the best <a href="https://nodejs.org" target="_blank">Node.js</a> drop-in replacement for <a href="https://nodejs.org/api/dns.html#resolveroptions" target="_blank">dns.promises.Resolver</a> using <a href="https://en.wikipedia.org/wiki/DNS_over_HTTPS" target="_blank">DNS over HTTPS</a> ("DoH") via <a href="https://github.com/nodejs/undici" target="_blank">undici</a> with built-in retries, timeouts, smart server rotation, <a href="https://developer.mozilla.org/en-US/docs/Web/API/AbortController" target="_blank">AbortControllers</a>, and caching support for multiple backends (with TTL and purge support).
+  🍊 <a href="https://github.com/forwardemail/nodejs-dns-over-https-tangerine" target="_blank">Tangerine</a> is the best <a href="https://nodejs.org" target="_blank">Node.js</a> drop-in replacement for <a href="https://nodejs.org/api/dns.html#resolveroptions" target="_blank">dns.promises.Resolver</a> using <a href="https://en.wikipedia.org/wiki/DNS_over_HTTPS" target="_blank">DNS over HTTPS</a> ("DoH") via <a href="https://github.com/nodejs/undici" target="_blank">undici</a> with built-in retries, timeouts, smart server rotation, <a href="https://developer.mozilla.org/en-US/docs/Web/API/AbortController" target="_blank">AbortControllers</a>, and caching support for multiple backends (with TTL and purge support).
 </div>
 <hr />
 <div align="center">
@@ -228,7 +228,7 @@ tangerine.resolve('forwardemail.net').then(console.log);
 
   * Specify default request options based off the library under `requestOptions` below
 * Instance methods of [dns.promises.Resolver](https://nodejs.org/api/dns.html) are mirrored to :tangerine: Tangerine.
-* Resolver methods accept an optional `abortController` argument, which is an instance of [AbortController](https://developer.mozilla.org/en-US/docs/Web/API/AbortController).  Note that :tangerine: Tangerine manages `AbortController` usage internally – so you most likely won't need to pass your own (see [index.js](https://github.com/forwardemail/tangerine/blob/main/index.js) for more insight).
+* Resolver methods accept an optional `abortController` argument, which is an instance of [AbortController](https://developer.mozilla.org/en-US/docs/Web/API/AbortController).  Note that :tangerine: Tangerine manages `AbortController` usage internally – so you most likely won't need to pass your own (see [index.js](https://github.com/forwardemail/nodejs-dns-over-https-tangerine/blob/main/index.js) for more insight).
 * Resolver methods that accept `options` argument also accept an optional `options.purgeCache` option.
 * Resolver methods support a `purgeCache` option as either `options.purgeCache` (Boolean) via `options` argument or `purgeCache` (Boolean) argument – see [API](#api) and [Cache](#cache) for more insight.
   * If set to `true`, then the result will be re-queried and re-cached – see [Cache](#cache) documentation for more insight.
@@ -295,7 +295,7 @@ This mirrors output from <https://github.com/rthalley/dnspython>.
 
 ### `tangerine.resolveTlsa(hostname[, options, abortController]))`
 
-This method was added for DANE and TLSA support.  See this [excellent article](https://www.mailhardener.com/kb/dane), [index.js](https://github.com/forwardemail/tangerine/blob/main/index.js), and <https://github.com/nodejs/node/issues/39569> for more insight.
+This method was added for DANE and TLSA support.  See this [excellent article](https://www.mailhardener.com/kb/dane), [index.js](https://github.com/forwardemail/nodejs-dns-over-https-tangerine/blob/main/index.js), and <https://github.com/nodejs/node/issues/39569> for more insight.
 
 This function returns a Promise that resolves with an Array with parsed values from results:
 
@@ -381,7 +381,7 @@ console.log('mx', mx);
 
 ## Options
 
-Similar to the `options` argument from `new dns.promises.Resolver(options)` invocation – :tangerine: Tangerine also has its own options with default `dns` behavior mirrored. See [index.js](https://github.com/forwardemail/tangerine/blob/main/index.js) for more insight into how these options work.
+Similar to the `options` argument from `new dns.promises.Resolver(options)` invocation – :tangerine: Tangerine also has its own options with default `dns` behavior mirrored. See [index.js](https://github.com/forwardemail/nodejs-dns-over-https-tangerine/blob/main/index.js) for more insight into how these options work.
 
 | Property                  | Type                                                                          | Default Value                                                                                                                               | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 | ------------------------- | ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -507,7 +507,7 @@ If you run into issues while using :tangerine: Tangerine, then these recommendat
 Contributors can run benchmarks locally by cloning the repository, installing dependencies, and running the benchmarks script:
 
 ```sh
-git clone https://github.com/forwardemail/tangerine.git
+git clone https://github.com/forwardemail/nodejs-dns-over-https-tangerine.git
 cd tangerine
 npm install
 npm run benchmarks
@@ -523,9 +523,9 @@ BENCHMARK_PROTOCOL="http" BENCHMARK_HOST="127.0.0.1" BENCHMARK_PORT="4000" BENCH
 
 We have written extensive benchmarks to show that :tangerine: Tangerine is as fast as the native Node.js DNS module (with the exception of the `lookup` command).  Note that performance is opinionated – since rate limiting plays a factor dependent on the DNS servers you are using and since caching is most likely going to takeover.
 
-The latest benchmark results are viewable on GitHub under this repository's [GitHub CI actions logs](https://github.com/forwardemail/tangerine/actions?query=event%3Apush):
+The latest benchmark results are viewable on GitHub under this repository's [GitHub CI actions logs](https://github.com/forwardemail/nodejs-dns-over-https-tangerine/actions?query=event%3Apush):
 
-> [Node 16 on ubuntu-latest](https://github.com/forwardemail/tangerine/actions/runs/4297805550/jobs/7491228635#step:6:1)
+> [Node 16 on ubuntu-latest](https://github.com/forwardemail/nodejs-dns-over-https-tangerine/actions/runs/4297805550/jobs/7491228635#step:6:1)
 
 ```diff
 node benchmarks/lookup && node benchmarks/resolve && node benchmarks/reverse
@@ -562,7 +562,7 @@ dns.promises.reverse with caching x 5,123,900 ops/sec ±0.96% (85 runs sampled)
 +Fastest without caching is: tangerine.reverse GET without caching
 ```
 
-> [Node 18 on ubuntu latest](https://github.com/forwardemail/tangerine/actions/runs/4297805550/jobs/7491228742#step:6:1)
+> [Node 18 on ubuntu latest](https://github.com/forwardemail/nodejs-dns-over-https-tangerine/actions/runs/4297805550/jobs/7491228742#step:6:1)
 
 ```diff
 node benchmarks/lookup && node benchmarks/resolve && node benchmarks/reverse && node benchmarks/http
@@ -736,4 +736,4 @@ Fastest is undici GET request
 
 ##
 
-<a href="#"><img src="https://raw.githubusercontent.com/forwardemail/tangerine/main/media/footer.png" alt="#" /></a>
+<a href="#"><img src="https://raw.githubusercontent.com/forwardemail/nodejs-dns-over-https-tangerine/main/media/footer.png" alt="#" /></a>

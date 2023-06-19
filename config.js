@@ -2,8 +2,8 @@
 docute.init({
   debug: true,
   title: 'Tangerine',
-  repo: 'forwardemail/tangerine',
-  'edit-link': 'https://github.com/forwardemail/tangerine/tree/main/',
+  repo: 'forwardemail/nodejs-dns-over-https-tangerine',
+  'edit-link': 'https://github.com/forwardemail/nodejs-dns-over-https-tangerine/tree/main/',
   nav: {
     default: [
       {

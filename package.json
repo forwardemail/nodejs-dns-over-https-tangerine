@@ -4,7 +4,7 @@
   "version": "1.5.2",
   "author": "Forward Email (https://forwardemail.net)",
   "bugs": {
-    "url": "https://github.com/forwardemail/tangerine/issues"
+    "url": "https://github.com/forwardemail/nodejs-dns-over-https-tangerine/issues"
   },
   "contributors": [
     "Forward Email (https://forwardemail.net)"
@@ -62,7 +62,7 @@
   "files": [
     "index.js"
   ],
-  "homepage": "https://github.com/forwardemail/tangerine",
+  "homepage": "https://github.com/forwardemail/nodejs-dns-over-https-tangerine",
   "keywords": [
     "1:1",
     "abort",
@@ -153,7 +153,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/forwardemail/tangerine"
+    "url": "https://github.com/forwardemail/nodejs-dns-over-https-tangerine"
   },
   "scripts": {
     "ava": "cross-env NODE_ENV=test ava",
