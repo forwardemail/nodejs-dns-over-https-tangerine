@@ -89,8 +89,7 @@ npm install tangerine undici
 
 Our team at [Forward Email](https://forwardemail.net) (100% open-source and privacy-focused email service) needed a better solution for DNS.
 
-<details>
-<summary>After years of using the Node.js internal DNS module, we ran into these recurring patterns:</summary>
+After years of using the Node.js internal DNS module, we ran into these recurring patterns:
 
 * [Cloudflare](https://developers.cloudflare.com/1.1.1.1/encryption/dns-over-https/) and [Google](https://developers.google.com/speed/public-dns/docs/doh/) now have DNS over HTTPS servers ("DoH") available – and browsers such as Mozilla Firefox now have it [enabled by default](https://support.mozilla.org/en-US/kb/firefox-dns-over-https).
 * DNS cache consistency across multiple servers cannot be easily accomplished using packages such as `unbound`, `dnsmasq`, and `bind` – and configuring `/etc/resolv.conf` across multiple Ubuntu versions is not enjoyable (even with Ansible).  Maintaining logic at the application layer is much easier from a development, deployment, and maintenance perspective.
@@ -106,8 +105,6 @@ Our team at [Forward Email](https://forwardemail.net) (100% open-source and priv
 * The native Node.js `dns` module does not support caching out of the box – which is a [highly requested feature](https://github.com/nodejs/node/issues/5893) (but belongs in userland).
 * Writing tests against DNS-related infrastructure requires either hacky DNS mocking or a DNS server (manipulating cache is much easier).
 * <u>**The Node.js community is lacking a high-quality and dummy-proof userland DNS package with sensible defaults.**</u>
-
-</details>
 
 ### Why integrate DNS over HTTPS
 
@@ -133,8 +130,7 @@ Thanks to the authors of [dohdec](https://github.com/hildjj/dohdec), [dns-packet
 * HTTP error codes are mapped to DNS error codes (the error `code` and `errno` properties will appear as if they're from `dns` usage).  This is a configurable option enabled by default (see `returnHTTPErrors` option).
 * If you need callbacks, then use [util.callbackify](https://nodejs.org/api/util.html#utilcallbackifyoriginal) (e.g. `const resolveTxt = callbackify(tangerine.resolveTxt)`).
 
-<details>
-<summary>We have also added several improvements and new features:</summary>
+We have also added several improvements and new features:
 
 * Default name servers used have been set to [Cloudflare's](https://1.1.1.1/) (`['1.1.1.1', '1.0.0.1']`) (as opposed to the system default – which is often set to a default which is not privacy-focused or simply forgotten to be set by DevOps teams).  You may also want to use [Cloudflare's Malware and Adult Content Blocking](https://blog.cloudflare.com/introducing-1-1-1-1-for-families/) DNS server addresses instead.
 * You can pass a custom `servers` option (as opposed to having to invoke `dns.setServers(...)` or `resolver.setServers(...)`).
@@ -146,10 +142,7 @@ Thanks to the authors of [dohdec](https://github.com/hildjj/dohdec), [dns-packet
 * Debug via `NODE_DEBUG=tangerine node app.js` flag (uses [util.debuglog](https://nodejs.org/api/util.html#utildebuglogsection-callback)).
 * The method `setLocalAddress()` will parse the IP address and port properly to pass along for use with the agent as `localAddress` and `localPort`.  If you require IPv6 addresses with ports, you must encode it as `[IPv6]:PORT` ([similar to RFC 3986](https://serverfault.com/a/205794)).
 
-</details>
-
-<details>
-<summary>All existing <code>syscall</code> values have been preserved:</summary>
+All existing <code>syscall</code> values have been preserved:
 
 * `resolveAny` → `queryAny`
 * `resolve4` → `queryA`
@@ -165,8 +158,6 @@ Thanks to the authors of [dohdec](https://github.com/hildjj/dohdec), [dns-packet
 * `resolveNaptr` → `queryNaptr`
 * `resolveSoa` → `querySoa`
 * `reverse` → `getHostByAddr`
-
-</details>
 
 
 ## Usage and Examples
