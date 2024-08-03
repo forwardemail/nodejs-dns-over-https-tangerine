@@ -227,13 +227,13 @@ function compareResults(t, type, r1, r2) {
         _.isError(r1)
           ? r1
           : Array.isArray(r1) && r1.every((s) => _.isString(s))
-          ? r1.sort()
-          : sortKeys(r1),
+            ? r1.sort()
+            : sortKeys(r1),
         _.isError(r2)
           ? r2
           : Array.isArray(r2) && r2.every((s) => _.isString(s))
-          ? r2.sort()
-          : sortKeys(r2)
+            ? r2.sort()
+            : sortKeys(r2)
       );
     }
   }

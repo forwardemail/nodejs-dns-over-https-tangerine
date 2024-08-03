@@ -4,6 +4,7 @@ const Tangerine = require('..');
 
 const opts = { timeout: 5000, tries: 1 };
 
+// eslint-disable-next-line n/prefer-promises/dns
 dns.setServers(['1.1.1.1', '1.0.0.1']);
 
 const resolver = new dns.promises.Resolver(opts);

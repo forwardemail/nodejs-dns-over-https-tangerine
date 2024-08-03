@@ -11,6 +11,7 @@ const autoBind = require('auto-bind');
 const getStream = require('get-stream');
 const hostile = require('hostile');
 const ipaddr = require('ipaddr.js');
+const isStream = require('is-stream');
 const mergeOptions = require('merge-options');
 const pMap = require('p-map');
 const pTimeout = require('p-timeout');
@@ -702,8 +703,8 @@ class Tangerine extends dns.promises.Resolver {
 
     // safeguard (matches c-ares)
     if (lower === 'localhost' || lower === 'localhost.') {
-      if (!resolve4) resolve4 = ['127.0.0.1'];
-      if (!resolve6) resolve6 = ['::1'];
+      resolve4 ||= ['127.0.0.1'];
+      resolve6 ||= ['::1'];
     }
 
     if (isIPv4(name)) {
@@ -1128,22 +1129,41 @@ class Tangerine extends dns.promises.Resolver {
               const statusCode = response.status || response.statusCode;
               debug('response', { statusCode, headers });
 
+              // <https://github.com/nodejs/undici/issues/3353#issuecomment-2184635954>
+              // eslint-disable-next-line max-depth
+              if (body && isStream(body) && typeof body.on === 'function')
+                body.on('error', (err) => {
+                  this.options.logger.error(err, { response });
+                });
+
               // eslint-disable-next-line max-depth
               if (body && statusCode >= 200 && statusCode < 300) {
+                // <https://sindresorhus.com/blog/goodbye-nodejs-buffer>
                 buffer = Buffer.isBuffer(body)
                   ? body
                   : // eslint-disable-next-line no-await-in-loop
                     await getStream.buffer(body);
+                // <https://github.com/nodejs/undici/issues/3353>
+                // eslint-disable-next-line no-await-in-loop, max-depth
+                if (body && typeof body.dump === 'function') await body.dump();
                 // eslint-disable-next-line max-depth
                 if (!abortController.signal.aborted) abortController.abort();
                 break;
               }
 
+              // <https://github.com/nodejs/undici/issues/3353>
+              // eslint-disable-next-line no-await-in-loop, max-depth
+              if (body && typeof body.dump === 'function') await body.dump();
+
+              // <https://github.com/nodejs/undici/blob/00dfd0bd41e73782452aecb728395f354585ca94/lib/core/errors.js#L47-L58>
               const message =
                 http.STATUS_CODES[statusCode] ||
                 this.options.defaultHTTPErrorMessage;
               const err = new Error(message);
+              err.body = body;
+              err.status = statusCode;
               err.statusCode = statusCode;
+              err.headers = headers;
               throw err;
             }
           } catch (err) {
@@ -1202,6 +1222,12 @@ class Tangerine extends dns.promises.Resolver {
       // that one or more dns servers have persistent issues
       if (errors.length > 0)
         this.options.logger.error(this.constructor.combineErrors(errors));
+
+      //
+      // NOTE: dns-packet does not yet support Uint8Array
+      //       (however undici does have body.arrayBuffer() method)
+      //
+      // https://github.com/mafintosh/dns-packet/issues/72
       return packet.decode(buffer);
     } catch (_err) {
       if (!abortController.signal.aborted) abortController.abort();
@@ -1886,8 +1912,8 @@ class Tangerine extends dns.promises.Resolver {
             Buffer.isBuffer(a.data)
               ? a.data.toString()
               : Array.isArray(a.data)
-              ? a.data.map((d) => (Buffer.isBuffer(d) ? d.toString() : d))
-              : a.data
+                ? a.data.map((d) => (Buffer.isBuffer(d) ? d.toString() : d))
+                : a.data
           ];
         });
       }
