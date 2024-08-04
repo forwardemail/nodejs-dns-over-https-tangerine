@@ -1176,7 +1176,8 @@ class Tangerine extends dns.promises.Resolver {
             // eslint-disable-next-line max-depth
             if (err.code === dns.NOTFOUND) throw err;
 
-            ipErrors.push(err);
+            // eslint-disable-next-line max-depth
+            if (err.status >= 429) ipErrors.push(err);
 
             // break out of the loop if status code was not retryable
             // eslint-disable-next-line max-depth
