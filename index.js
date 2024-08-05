@@ -1146,8 +1146,8 @@ class Tangerine extends dns.promises.Resolver {
                 // <https://github.com/nodejs/undici/issues/3353>
                 // eslint-disable-next-line no-await-in-loop, max-depth
                 if (body && typeof body.dump === 'function') await body.dump();
-                // eslint-disable-next-line max-depth
-                if (!abortController.signal.aborted) abortController.abort();
+                // NOTE: we don't need to do this (causes uncaught exception)
+                // if (!abortController.signal.aborted) abortController.abort();
                 break;
               }
 
@@ -1231,7 +1231,8 @@ class Tangerine extends dns.promises.Resolver {
       // https://github.com/mafintosh/dns-packet/issues/72
       return packet.decode(buffer);
     } catch (_err) {
-      if (!abortController.signal.aborted) abortController.abort();
+      // NOTE: we don't need to do this (causes uncaught exception)
+      // if (!abortController.signal.aborted) abortController.abort();
       debug(_err, { name, rrtype, ecsSubnet });
       if (this.options.returnHTTPErrors) throw _err;
       const err = this.constructor.createError(
@@ -1255,7 +1256,13 @@ class Tangerine extends dns.promises.Resolver {
   //       (instead they are called with "ABORT_ERR"; see ABORT_ERROR_CODES)
   cancel() {
     for (const abortController of this.abortControllers) {
-      if (!abortController.signal.aborted) abortController.abort();
+      if (!abortController.signal.aborted) {
+        try {
+          abortController.abort();
+        } catch (err) {
+          this.options.logger.debug(err);
+        }
+      }
     }
   }
 
@@ -1273,7 +1280,11 @@ class Tangerine extends dns.promises.Resolver {
       parentAbortController.signal.addEventListener(
         'abort',
         () => {
-          abortController.abort();
+          try {
+            abortController.abort();
+          } catch (err) {
+            this.options.logger.debug(err);
+          }
         },
         { once: true }
       );
