@@ -1043,7 +1043,7 @@ class Tangerine extends dns.promises.Resolver {
   //
   async #request(pkt, server, abortController, timeout = this.options.timeout) {
     // safeguard in case aborted
-    if (abortController.signal.aborted) return;
+    if (abortController?.signal?.aborted) return;
 
     let localAddress;
     let localPort;
@@ -1129,31 +1129,33 @@ class Tangerine extends dns.promises.Resolver {
               const statusCode = response.status || response.statusCode;
               debug('response', { statusCode, headers });
 
-              // <https://github.com/nodejs/undici/issues/3353#issuecomment-2184635954>
-              // eslint-disable-next-line max-depth
-              if (body && isStream(body) && typeof body.on === 'function')
-                body.on('error', (err) => {
-                  this.options.logger.error(err, { response });
-                });
-
               // eslint-disable-next-line max-depth
               if (body && statusCode >= 200 && statusCode < 300) {
                 // <https://sindresorhus.com/blog/goodbye-nodejs-buffer>
-                buffer = Buffer.isBuffer(body)
-                  ? body
-                  : // eslint-disable-next-line no-await-in-loop
-                    await getStream.buffer(body);
-                // <https://github.com/nodejs/undici/issues/3353>
-                // eslint-disable-next-line no-await-in-loop, max-depth
-                if (body && typeof body.dump === 'function') await body.dump();
-                // NOTE: we don't need to do this (causes uncaught exception)
-                // if (!abortController.signal.aborted) abortController.abort();
+                // eslint-disable-next-line max-depth
+                if (Buffer.isBuffer(body)) buffer = body;
+                else if (typeof body.arrayBuffer === 'function')
+                  // eslint-disable-next-line no-await-in-loop
+                  buffer = Buffer.from(await body.arrayBuffer());
+                // eslint-disable-next-line no-await-in-loop
+                else if (isStream(body)) buffer = await getStream.buffer(body);
+                else {
+                  const err = new TypeError('Unsupported body type');
+                  err.body = body;
+                  throw err;
+                }
+
                 break;
               }
 
               // <https://github.com/nodejs/undici/issues/3353>
-              // eslint-disable-next-line no-await-in-loop, max-depth
-              if (body && typeof body.dump === 'function') await body.dump();
+              if (
+                !abortController?.signal?.aborted &&
+                body &&
+                typeof body.dump === 'function'
+              )
+                // eslint-disable-next-line no-await-in-loop
+                await body.dump();
 
               // <https://github.com/nodejs/undici/blob/00dfd0bd41e73782452aecb728395f354585ca94/lib/core/errors.js#L47-L58>
               const message =
@@ -1173,14 +1175,13 @@ class Tangerine extends dns.promises.Resolver {
             // NOTE: if NOTFOUND error occurs then don't attempt further requests
             // <https://nodejs.org/api/dns.html#dnssetserversservers>
             //
-            // eslint-disable-next-line max-depth
+
             if (err.code === dns.NOTFOUND) throw err;
 
-            // eslint-disable-next-line max-depth
             if (err.status >= 429) ipErrors.push(err);
 
             // break out of the loop if status code was not retryable
-            // eslint-disable-next-line max-depth
+
             if (
               !(
                 err.statusCode &&
@@ -1231,8 +1232,6 @@ class Tangerine extends dns.promises.Resolver {
       // https://github.com/mafintosh/dns-packet/issues/72
       return packet.decode(buffer);
     } catch (_err) {
-      // NOTE: we don't need to do this (causes uncaught exception)
-      // if (!abortController.signal.aborted) abortController.abort();
       debug(_err, { name, rrtype, ecsSubnet });
       if (this.options.returnHTTPErrors) throw _err;
       const err = this.constructor.createError(
@@ -1258,7 +1257,7 @@ class Tangerine extends dns.promises.Resolver {
     for (const abortController of this.abortControllers) {
       if (!abortController.signal.aborted) {
         try {
-          abortController.abort();
+          abortController.abort('Cancel invoked');
         } catch (err) {
           this.options.logger.debug(err);
         }
@@ -1281,7 +1280,7 @@ class Tangerine extends dns.promises.Resolver {
         'abort',
         () => {
           try {
-            abortController.abort();
+            abortController.abort('Parent abort controller aborted');
           } catch (err) {
             this.options.logger.debug(err);
           }
