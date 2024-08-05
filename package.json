@@ -20,7 +20,6 @@
     "is-stream": "2.0.1",
     "merge-options": "3.0.4",
     "p-map": "4",
-    "p-timeout": "4",
     "p-wait-for": "3",
     "port-numbers": "6.0.1",
     "private-ip": "^3.0.2",

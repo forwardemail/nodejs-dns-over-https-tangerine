@@ -14,7 +14,6 @@ const ipaddr = require('ipaddr.js');
 const isStream = require('is-stream');
 const mergeOptions = require('merge-options');
 const pMap = require('p-map');
-const pTimeout = require('p-timeout');
 const pWaitFor = require('p-wait-for');
 const packet = require('dns-packet');
 const semver = require('semver');
@@ -108,8 +107,6 @@ class Tangerine extends dns.promises.Resolver {
   static combineErrors(errors) {
     let err;
     if (errors.length === 1) {
-      err = errors[0];
-    } else if (errors.every((e) => e instanceof pTimeout.TimeoutError)) {
       err = errors[0];
     } else {
       err = new Error(
@@ -1043,7 +1040,7 @@ class Tangerine extends dns.promises.Resolver {
   //
   async #request(pkt, server, abortController, timeout = this.options.timeout) {
     // safeguard in case aborted
-    if (abortController?.signal?.aborted) return;
+    abortController?.signal?.throwIfAborted();
 
     let localAddress;
     let localPort;
@@ -1067,15 +1064,17 @@ class Tangerine extends dns.promises.Resolver {
     // <https://github.com/hildjj/dohdec/blob/43564118c40f2127af871bdb4d40f615409d4b9c/pkg/dohdec/lib/doh.js#L117-L120>
     if (this.options.requestOptions.method.toLowerCase() === 'get') {
       if (!dohdec) await pWaitFor(() => Boolean(dohdec));
+      // safeguard in case aborted
+      abortController?.signal?.throwIfAborted();
       url += `?dns=${dohdec.DNSoverHTTPS.base64urlEncode(pkt)}`;
     } else {
       options.body = pkt;
     }
 
     debug('request', { url, options });
-    const response = await pTimeout(this.request(url, options), timeout, {
-      signal: abortController.signal
-    });
+    const t = setTimeout(() => abortController.abort(), timeout);
+    const response = await this.request(url, options);
+    clearTimeout(t);
     return response;
   }
 
@@ -1237,9 +1236,7 @@ class Tangerine extends dns.promises.Resolver {
       const err = this.constructor.createError(
         name,
         rrtype,
-        _err instanceof pTimeout.TimeoutError || _err.name === 'TimeoutError'
-          ? dns.TIMEOUT
-          : _err.code,
+        _err.code,
         _err.errno
       );
       // then map it to dns.CONNREFUSED
