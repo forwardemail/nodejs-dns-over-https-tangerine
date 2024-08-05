@@ -1072,7 +1072,9 @@ class Tangerine extends dns.promises.Resolver {
     }
 
     debug('request', { url, options });
-    const t = setTimeout(() => abortController.abort(), timeout);
+    const t = setTimeout(() => {
+      if (!abortController?.signal?.aborted) abortController.abort();
+    }, timeout);
     const response = await this.request(url, options);
     clearTimeout(t);
     return response;
