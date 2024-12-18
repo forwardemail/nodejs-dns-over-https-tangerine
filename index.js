@@ -17,7 +17,6 @@ const pMap = require('p-map');
 const pWaitFor = require('p-wait-for');
 const packet = require('dns-packet');
 const semver = require('semver');
-const structuredClone = require('@ungap/structured-clone').default;
 const { getService } = require('port-numbers');
 const pkg = require('./package.json');
 

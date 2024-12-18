@@ -15,7 +15,7 @@
 </div>
 <hr />
 <div align="center">
-  ⚡ <a href="#tangerine-benchmarks"><i><u><strong>AS FAST AS</strong></u></i></a> native <a href="https://nodejs.org/api/dns.html" target="_blank">Node.js <code>dns</code></a>! 🚀 &bull; Supports Node v16+ with ESM/CJS &bull; Made for <a href="https://forwardemail.net" target="_blank"><strong>Forward Email</strong></a>.
+  ⚡ <a href="#tangerine-benchmarks"><i><u><strong>AS FAST AS</strong></u></i></a> native <a href="https://nodejs.org/api/dns.html" target="_blank">Node.js <code>dns</code></a>! 🚀 &bull; Supports Node v17+ with ESM/CJS &bull; Made for <a href="https://forwardemail.net" target="_blank"><strong>Forward Email</strong></a>.
 </div>
 <hr />
 
