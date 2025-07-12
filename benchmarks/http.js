@@ -1,15 +1,13 @@
-const http = require('node:http');
-const process = require('node:process');
-const Benchmark = require('benchmark');
-const axios = require('axios');
-const fetch = require('node-fetch');
-const fetchMock = require('fetch-mock');
-const got = require('got');
-const nock = require('nock');
-const phin = require('phin');
-const request = require('request');
-const superagent = require('superagent');
-const undici = require('undici');
+import http from 'node:http';
+import process from 'node:process';
+import Benchmark from 'benchmark';
+import axios from 'axios';
+import fetchMock from 'fetch-mock';
+import got from 'got';
+import nock from 'nock';
+import phin from 'phin';
+import superagent from 'superagent';
+import undici from 'undici';
 
 const PROTOCOL = process.env.BENCHMARK_PROTOCOL || 'http';
 const HOST = process.env.BENCHMARK_HOST || 'test';
@@ -38,26 +36,32 @@ if (HOST === 'test') {
     .get(PATH)
     .reply(200, 'ok');
 
-  fetchMock.mock(URL, 200);
+  fetchMock.get(URL, 200);
+  fetchMock.post(URL, 200);
 }
 
 const suite = new Benchmark.Suite();
 
-suite.on('start', function (ev) {
+suite.on('start', (ev) => {
   console.log(`Started: ${ev.currentTarget.name}`);
 });
 
 suite.add('http.request POST request', {
   defer: true,
   fn(defer) {
-    const req = http.request(
-      { host: HOST, port: PORT, path: PATH, method: 'POST' },
-      (res) => {
-        res.resume().on('end', () => defer.resolve());
+    const request_ = http.request(
+      {
+        host: HOST,
+        port: PORT,
+        path: PATH,
+        method: 'POST'
+      },
+      (response) => {
+        response.resume().on('end', () => defer.resolve());
       }
     );
-    req.write('');
-    req.end();
+    request_.write('');
+    request_.end();
   }
 });
 
@@ -65,8 +69,8 @@ suite.add('http.request GET request', {
   defer: true,
   fn(defer) {
     http
-      .request({ path: PATH, host: HOST, port: PORT }, (res) => {
-        res.resume().on('end', () => defer.resolve());
+      .request({ path: PATH, host: HOST, port: PORT }, (response) => {
+        response.resume().on('end', () => defer.resolve());
       })
       .end();
   }
@@ -74,91 +78,108 @@ suite.add('http.request GET request', {
 
 suite.add('undici GET request', {
   defer: true,
-  fn(defer) {
-    undici
-      .request(URL)
-      .then(() => defer.resolve())
-      .catch(() => defer.resolve());
+  async fn(defer) {
+    try {
+      await undici.request(URL);
+    } catch {}
+
+    defer.resolve();
   }
 });
 
 suite.add('undici POST request', {
   defer: true,
-  fn(defer) {
-    undici
-      .request(URL, { method: 'POST' })
-      .then(() => defer.resolve())
-      .catch(() => defer.resolve());
+  async fn(defer) {
+    try {
+      await undici.request(URL, { method: 'POST' });
+    } catch {}
+
+    defer.resolve();
   }
 });
 
 suite.add('axios GET request', {
   defer: true,
-  fn(defer) {
-    axios
-      .get(PATH)
-      .then(() => defer.resolve())
-      .catch(() => defer.resolve());
+  async fn(defer) {
+    try {
+      await axios.get(PATH);
+    } catch {}
+
+    defer.resolve();
   }
 });
 
 suite.add('axios POST request', {
   defer: true,
-  fn(defer) {
-    axios
-      .post(PATH)
-      .then(() => defer.resolve())
-      .catch(() => defer.resolve());
+  async fn(defer) {
+    try {
+      await axios.post(PATH);
+    } catch {}
+
+    defer.resolve();
   }
 });
 
 suite.add('got GET request', {
   defer: true,
-  fn(defer) {
-    got
-      .get(URL, { throwHttpErrors: false, retry: 0 })
-      .then(() => defer.resolve())
-      .catch(() => defer.resolve());
+  async fn(defer) {
+    try {
+      await got.get(URL, { throwHttpErrors: false, retry: 0 });
+    } catch {}
+
+    defer.resolve();
   }
 });
 
 suite.add('got POST request', {
   defer: true,
-  fn(defer) {
-    got
-      .post(URL, { throwHttpErrors: false })
-      .then(() => defer.resolve())
-      .catch(() => defer.resolve());
+  async fn(defer) {
+    try {
+      await got.post(URL, { throwHttpErrors: false });
+    } catch {}
+
+    defer.resolve();
   }
 });
 
 suite.add('fetch GET request', {
   defer: true,
-  fn(defer) {
-    fetch(URL).then(() => defer.resolve());
+  async fn(defer) {
+    await fetch(URL);
+    defer.resolve();
   }
 });
 
 suite.add('fetch POST request', {
   defer: true,
-  fn(defer) {
-    fetch(URL, { method: 'POST' })
-      .then(() => defer.resolve())
-      .catch(() => defer.resolve());
+  async fn(defer) {
+    try {
+      await fetch(URL, { method: 'POST' });
+    } catch {}
+
+    defer.resolve();
   }
 });
 
-suite.add('request GET request', {
+suite.add('axios GET request', {
   defer: true,
-  fn(defer) {
-    request(URL, () => defer.resolve());
+  async fn(defer) {
+    try {
+      await axios.get(URL);
+    } catch {}
+
+    defer.resolve();
   }
 });
 
-suite.add('request POST request', {
+suite.add('axios POST request', {
   defer: true,
-  fn(defer) {
-    request.post({ url: URL }, () => defer.resolve());
+  async fn(defer) {
+    try {
+      await axios.post(URL);
+    } catch {}
+
+    defer.resolve();
   }
 });
 
@@ -181,19 +202,21 @@ suite.add('superagent POST request', {
 
 suite.add('phin GET request', {
   defer: true,
-  fn(defer) {
-    phin(URL).then(() => defer.resolve());
+  async fn(defer) {
+    await phin(URL);
+    defer.resolve();
   }
 });
 
 suite.add('phin POST request', {
   defer: true,
-  fn(defer) {
-    phin({ url: URL, method: 'POST' }).then(() => defer.resolve());
+  async fn(defer) {
+    await phin({ url: URL, method: 'POST' });
+    defer.resolve();
   }
 });
 
-suite.on('cycle', function (ev) {
+suite.on('cycle', (ev) => {
   console.log(String(ev.target));
 });
 

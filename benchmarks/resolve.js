@@ -1,13 +1,13 @@
-const dns = require('node:dns');
-const Benchmark = require('benchmark');
-const Tangerine = require('..');
+import dns from 'node:dns';
+import Benchmark from 'benchmark';
+import Tangerine from '../index.js';
 
-const opts = { timeout: 5000, tries: 1 };
+const options = { timeout: 5000, tries: 1 };
 
 // eslint-disable-next-line n/prefer-promises/dns
 dns.setServers(['1.1.1.1', '1.0.0.1']);
 
-const resolver = new dns.promises.Resolver(opts);
+const resolver = new dns.promises.Resolver(options);
 resolver.setServers(['1.1.1.1', '1.0.0.1']);
 
 const cache = new Map();
@@ -15,34 +15,40 @@ const cache = new Map();
 async function resolveWithCache(host, record) {
   const key = `${host}:${record}`;
   let result = cache.get(key);
-  if (result) return result;
+  if (result) {
+    return result;
+  }
+
   result = await resolver.resolve(host, record);
-  if (result) cache.set(key, result);
+  if (result) {
+    cache.set(key, result);
+  }
+
   return result;
 }
 
-const tangerine = new Tangerine({ ...opts, method: 'POST' });
+const tangerine = new Tangerine({ ...options, method: 'POST' });
 const tangerineNoCache = new Tangerine({
-  ...opts,
+  ...options,
   method: 'POST',
   cache: false
 });
-const tangerineGet = new Tangerine(opts);
-const tangerineGetNoCache = new Tangerine({ ...opts, cache: false });
+const tangerineGet = new Tangerine(options);
+const tangerineGetNoCache = new Tangerine({ ...options, cache: false });
 
 // Google servers
 const servers = ['8.8.8.8', '8.8.4.4'];
 
-const tangerineGoogle = new Tangerine({ ...opts, servers, method: 'POST' });
+const tangerineGoogle = new Tangerine({ ...options, servers, method: 'POST' });
 const tangerineGoogleNoCache = new Tangerine({
-  ...opts,
+  ...options,
   servers,
   method: 'POST',
   cache: false
 });
-const tangerineGoogleGet = new Tangerine({ ...opts, servers });
+const tangerineGoogleGet = new Tangerine({ ...options, servers });
 const tangerineGoogleGetNoCache = new Tangerine({
-  ...opts,
+  ...options,
   servers,
   cache: false
 });
@@ -54,7 +60,7 @@ const record = 'A';
 
 const suite = new Benchmark.Suite('resolve');
 
-suite.on('start', function (ev) {
+suite.on('start', (ev) => {
   console.log(`Started: ${ev.currentTarget.name}`);
 });
 

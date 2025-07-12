@@ -1,39 +1,45 @@
-const dns = require('node:dns');
-const Benchmark = require('benchmark');
-const Tangerine = require('..');
+import dns from 'node:dns';
+import Benchmark from 'benchmark';
+import Tangerine from '../index.js';
 
-const opts = { timeout: 5000, tries: 1 };
+const options = { timeout: 5000, tries: 1 };
 
 // eslint-disable-next-line n/prefer-promises/dns
 dns.setServers(['1.1.1.1', '1.0.0.1']);
 
-const resolver = new dns.promises.Resolver(opts);
+const resolver = new dns.promises.Resolver(options);
 resolver.setServers(['1.1.1.1', '1.0.0.1']);
 
 const cache = new Map();
 
 async function lookupWithCache(host) {
   let result = cache.get(host);
-  if (result) return result;
+  if (result) {
+    return result;
+  }
+
   result = await dns.promises.lookup(host);
-  if (result) cache.set(host, result);
+  if (result) {
+    cache.set(host, result);
+  }
+
   return result;
 }
 
-const tangerine = new Tangerine({ ...opts, method: 'POST' });
+const tangerine = new Tangerine({ ...options, method: 'POST' });
 const tangerineNoCache = new Tangerine({
-  ...opts,
+  ...options,
   method: 'POST',
   cache: false
 });
-const tangerineGet = new Tangerine(opts);
-const tangerineGetNoCache = new Tangerine({ ...opts, cache: false });
+const tangerineGet = new Tangerine(options);
+const tangerineGetNoCache = new Tangerine({ ...options, cache: false });
 
 const host = 'netflix.com';
 
 const suite = new Benchmark.Suite('lookup');
 
-suite.on('start', function (ev) {
+suite.on('start', (ev) => {
   console.log(`Started: ${ev.currentTarget.name}`);
 });
 

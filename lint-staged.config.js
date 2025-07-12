@@ -1,5 +1,5 @@
 const config = {
-  files: ['test/*.js', 'test/**/*.js']
+  '*.js': 'xo --fix'
 };
 
 export default config;
