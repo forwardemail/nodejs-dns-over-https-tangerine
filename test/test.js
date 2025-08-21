@@ -145,7 +145,7 @@ function areErrorsEquivalent(error1, error2) {
   return error1.code === error2.code;
 }
 
-// eslint-disable-next-line complexity
+ 
 function compareResults(t, type, r1, r2) {
   // T.log('tangerine', r1);
   // t.log('resolver', r2);

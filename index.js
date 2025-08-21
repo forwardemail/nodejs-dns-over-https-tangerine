@@ -6,10 +6,7 @@ import { Buffer } from 'node:buffer';
 import { debuglog } from 'node:util';
 import { getEventListeners, setMaxListeners } from 'node:events';
 import { isIP, isIPv4, isIPv6 } from 'node:net';
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-import path from 'node:path';
-import punycodeModule from 'punycode/punycode.js';
+import { toASCII } from 'punycode/punycode.es6.js';
 import autoBind from 'auto-bind';
 import getStream from 'get-stream';
 import hostile from 'hostile';
@@ -20,18 +17,11 @@ import pMap from 'p-map';
 import pWaitFor from 'p-wait-for';
 import packet from 'dns-packet';
 import semver from 'semver';
-import portNumbers from 'port-numbers' with { type: 'json' };
 import { request as undiciRequest } from 'undici';
-
-const { toASCII } = punycodeModule;
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-// Read package.json for ESM
-const pkg = JSON.parse(
-  readFileSync(path.join(__dirname, 'package.json'), 'utf8')
-);
+import * as dohdec from 'dohdec';
+import isPrivateIP from 'private-ip';
+import portNumbers from 'port-numbers' with { type: 'json' };
+import pkg from './package.json' with { type: 'json' };
 
 // Service name mapping to match Node.js built-in behavior
 const serviceNameMap = {
@@ -67,20 +57,6 @@ const getService = (port, protocol = 'tcp') => {
 };
 
 const debug = debuglog('tangerine');
-
-// Dynamically import dohdec
-let dohdec;
-// eslint-disable-next-line unicorn/prefer-top-level-await
-import('dohdec').then((object) => {
-  dohdec = object;
-});
-
-// Dynamically import private-ip
-let isPrivateIP;
-// eslint-disable-next-line unicorn/prefer-top-level-await
-import('private-ip').then((object) => {
-  isPrivateIP = object.default;
-});
 
 const HOSTFILE = hostile
   .get(true)
@@ -649,7 +625,7 @@ class Tangerine extends dns.promises.Resolver {
     }
   }
 
-  // eslint-disable-next-line complexity
+
   async lookup(name, options = {}) {
     // Validate name
     if (typeof name !== 'string') {
@@ -694,7 +670,7 @@ class Tangerine extends dns.promises.Resolver {
     }
 
     // Validate hints
-    // eslint-disable-next-line no-bitwise
+
     if ((options?.hints & ~(dns.ADDRCONFIG | dns.ALL | dns.V4MAPPED)) !== 0) {
       const error = new TypeError(
         `The argument 'hints' is invalid. Received ${options.hints}`
@@ -727,13 +703,13 @@ class Tangerine extends dns.promises.Resolver {
           break;
         }
 
-        // eslint-disable-next-line no-bitwise
+
         case dns.ADDRCONFIG | dns.V4MAPPED: {
           options.family = this.constructor.getAddrConfigTypes();
           break;
         }
 
-        // eslint-disable-next-line no-bitwise
+
         case dns.ADDRCONFIG | dns.V4MAPPED | dns.ALL: {
           options.family = this.constructor.getAddrConfigTypes();
 
@@ -897,7 +873,7 @@ class Tangerine extends dns.promises.Resolver {
           break;
         }
 
-        // eslint-disable-next-line no-bitwise
+
         case dns.ADDRCONFIG | dns.V4MAPPED: {
           if (
             options.family === 6 &&
@@ -911,7 +887,7 @@ class Tangerine extends dns.promises.Resolver {
           break;
         }
 
-        // eslint-disable-next-line no-bitwise
+
         case dns.V4MAPPED | dns.ALL: {
           if (
             options.family === 6 &&
@@ -926,7 +902,7 @@ class Tangerine extends dns.promises.Resolver {
           break;
         }
 
-        // eslint-disable-next-line no-bitwise
+
         case dns.ADDRCONFIG | dns.V4MAPPED | dns.ALL: {
           if (
             options.family === 6 &&
@@ -1223,7 +1199,7 @@ class Tangerine extends dns.promises.Resolver {
   }
 
   // <https://github.com/hildjj/dohdec/tree/main/pkg/dohdec>
-  // eslint-disable-next-line complexity
+
   async #query(name, rrtype = 'A', ecsSubnet, abortController) {
     if (!dohdec) {
       await pWaitFor(() => Boolean(dohdec));
@@ -1260,7 +1236,7 @@ class Tangerine extends dns.promises.Resolver {
         for (let i = 0; i < this.options.tries; i++) {
           try {
             // <https://github.com/sindresorhus/p-map-series/blob/bc1b9f5e19ed62363bff3d7dc5ecc1fd820ccb51/index.js#L1-L11>
-            // eslint-disable-next-line no-await-in-loop
+
             const response = await this.#request(
               pkt,
               server,
@@ -1269,23 +1245,23 @@ class Tangerine extends dns.promises.Resolver {
             );
 
             // If aborted signal then returns early
-            // eslint-disable-next-line max-depth
+
             if (response) {
               const { body, headers } = response;
               const statusCode = response.status || response.statusCode;
               debug('response', { statusCode, headers });
 
-              // eslint-disable-next-line max-depth
+
               if (body && statusCode >= 200 && statusCode < 300) {
                 // <https://sindresorhus.com/blog/goodbye-nodejs-buffer>
-                // eslint-disable-next-line max-depth
+
                 if (Buffer.isBuffer(body)) {
                   buffer = body;
                 } else if (typeof body.arrayBuffer === 'function') {
-                  // eslint-disable-next-line no-await-in-loop
+
                   buffer = Buffer.from(await body.arrayBuffer());
                 } else if (isStream(body)) {
-                  // eslint-disable-next-line no-await-in-loop
+
                   buffer = await getStream.buffer(body);
                 } else {
                   const error = new TypeError('Unsupported body type');
@@ -1302,7 +1278,7 @@ class Tangerine extends dns.promises.Resolver {
                 body &&
                 typeof body.dump === 'function'
               ) {
-                // eslint-disable-next-line no-await-in-loop
+
                 await body.dump();
               }
 
@@ -1647,7 +1623,7 @@ class Tangerine extends dns.promises.Resolver {
     this.options.servers = new Set(servers);
   }
 
-  // eslint-disable-next-line max-params
+
   spoofPacket(name, rrtype, answers = [], json = false, expires = 30_000) {
     if (typeof name !== 'string') {
       const error = new TypeError(
@@ -1721,7 +1697,7 @@ class Tangerine extends dns.promises.Resolver {
     return json ? JSON.stringify(object) : object;
   }
 
-  // eslint-disable-next-line complexity
+
   async resolve(name, rrtype = 'A', options = {}, abortController) {
     if (typeof name !== 'string') {
       const error = new TypeError(
@@ -1812,12 +1788,12 @@ class Tangerine extends dns.promises.Resolver {
           const diff = data.ttl - ttl;
 
           for (let i = 0; i < data.answers.length; i++) {
-            // eslint-disable-next-line max-depth
+
             if (typeof data.answers[i].ttl === 'number') {
               // Subtract ttl from answer
               data.answers[i].ttl = Math.round(data.answers[i].ttl - diff);
 
-              // eslint-disable-next-line max-depth
+
               if (data.answers[i].ttl <= 0) {
                 debug('answer cache expired', key);
                 data = undefined;

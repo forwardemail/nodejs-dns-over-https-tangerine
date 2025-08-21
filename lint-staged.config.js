@@ -1,5 +1,5 @@
 const config = {
-  '*.js': 'xo --fix'
+  '*.js': 'eslint --fix'
 };
 
 export default config;

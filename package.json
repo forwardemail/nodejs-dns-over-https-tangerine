@@ -33,7 +33,6 @@
     "benchmark": "^2.1.4",
     "cross-env": "^7.0.3",
     "eslint": "^9.31.0",
-    "eslint-config-xo-lass": "^2.0.1",
     "fetch-mock": "^12.5.3",
     "fixpack": "^4.0.0",
     "got": "14",
@@ -50,8 +49,7 @@
     "remark-preset-github": "^4.0.4",
     "sort-keys": "5.1.0",
     "superagent": "^10.2.2",
-    "undici": "^7.11.0",
-    "xo": "^1.1.1"
+    "undici": "^7.11.0"
   },
   "engines": {
     "node": ">=18"
@@ -155,7 +153,7 @@
   "scripts": {
     "ava": "cross-env NODE_ENV=test ava",
     "benchmarks": "node benchmarks/lookup && node benchmarks/resolve && node benchmarks/reverse",
-    "lint": "xo --fix && remark . -qfo && fixpack",
+    "lint": "eslint --fix . && remark . -qfo && node fixpack-wrapper.js",
     "nyc": "cross-env NODE_ENV=test nyc ava",
     "prepare": "husky",
     "pretest": "npm run lint",
