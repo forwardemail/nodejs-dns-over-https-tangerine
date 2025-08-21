@@ -1,5 +1,5 @@
 const config = {
-  files: ['test/*.js', 'test/**/*.js']
+  plugins: ['preset-github']
 };
 
 export default config;

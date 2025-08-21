@@ -1,4 +1,3 @@
-// eslint-disable-next-line no-undef
 docute.init({
   debug: true,
   title: 'Tangerine',
@@ -18,6 +17,5 @@ docute.init({
       }
     ]
   },
-  // eslint-disable-next-line no-undef
   plugins: [docuteEmojify()]
 });

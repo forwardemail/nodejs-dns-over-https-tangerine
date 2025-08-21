@@ -1,7 +1,7 @@
 {
   "name": "tangerine",
   "description": "Tangerine is the best Node.js drop-in replacement for dns.promises.Resolver using DNS over HTTPS (\"DoH\") via undici with built-in retries, timeouts, smart server rotation, AbortControllers, and caching support for multiple backends (with TTL and purge support).",
-  "version": "1.6.0",
+  "version": "2.0.0",
   "author": "Forward Email (https://forwardemail.net)",
   "bugs": {
     "url": "https://github.com/forwardemail/nodejs-dns-over-https-tangerine/issues"
@@ -10,53 +10,49 @@
     "Forward Email (https://forwardemail.net)"
   ],
   "dependencies": {
-    "auto-bind": "4",
+    "auto-bind": "5",
     "dns-packet": "^5.6.1",
-    "dohdec": "^5.0.3",
-    "get-stream": "6",
+    "dohdec": "^7.0.4",
+    "get-stream": "9",
     "hostile": "^1.4.0",
     "ipaddr.js": "^2.2.0",
-    "is-stream": "2.0.1",
+    "is-stream": "4.0.1",
     "merge-options": "3.0.4",
-    "p-map": "4",
-    "p-wait-for": "3",
-    "port-numbers": "6.0.1",
+    "p-map": "7",
+    "p-wait-for": "5",
+    "port-numbers": "8.0.28",
     "private-ip": "^3.0.2",
     "punycode": "^2.3.1",
-    "semver": "^7.6.3"
+    "semver": "^7.7.2"
   },
   "devDependencies": {
-    "@commitlint/cli": "^19.3.0",
-    "@commitlint/config-conventional": "^19.2.2",
-    "ava": "^5.2.0",
-    "axios": "^1.7.3",
+    "@commitlint/cli": "^19.8.1",
+    "@commitlint/config-conventional": "^19.8.1",
+    "ava": "^6.4.1",
+    "axios": "^1.11.0",
     "benchmark": "^2.1.4",
-    "cross-env": "^7.0.3",
-    "eslint": "^9.8.0",
-    "eslint-config-xo-lass": "^2.0.1",
-    "fetch-mock": "^10.1.1",
+    "cross-env": "^10.0.0",
+    "eslint": "^9.33.0",
+    "fetch-mock": "^12.5.3",
     "fixpack": "^4.0.0",
-    "got": "11",
-    "husky": "^9.1.4",
-    "ioredis": "^5.4.1",
+    "got": "14",
+    "husky": "^9.1.7",
+    "ioredis": "^5.7.0",
     "ioredis-mock": "^8.9.0",
-    "is-ci": "^3.0.1",
-    "lint-staged": "^15.2.8",
+    "is-ci": "^4.1.0",
+    "lint-staged": "^16.1.5",
     "lodash": "^4.17.21",
-    "nock": "^13.5.4",
-    "node-fetch": "2",
-    "nyc": "^17.0.0",
+    "nock": "^14.0.10",
+    "nyc": "^17.1.0",
     "phin": "^3.7.1",
-    "remark-cli": "11.0.0",
+    "remark-cli": "12.0.1",
     "remark-preset-github": "^4.0.4",
-    "request": "^2.88.2",
-    "sort-keys": "4.2.0",
-    "superagent": "^9.0.2",
-    "undici": "^6.19.5",
-    "xo": "^0.58.0"
+    "sort-keys": "5.1.0",
+    "superagent": "^10.2.3",
+    "undici": "^7.14.0"
   },
   "engines": {
-    "node": ">=17"
+    "node": ">=18"
   },
   "files": [
     "index.js"
@@ -157,10 +153,11 @@
   "scripts": {
     "ava": "cross-env NODE_ENV=test ava",
     "benchmarks": "node benchmarks/lookup && node benchmarks/resolve && node benchmarks/reverse",
-    "lint": "xo --fix && remark . -qfo && fixpack",
+    "lint": "eslint --fix . && remark . -qfo && node fixpack",
     "nyc": "cross-env NODE_ENV=test nyc ava",
-    "prepare": "husky install",
+    "prepare": "husky",
     "pretest": "npm run lint",
     "test": "npm run nyc"
-  }
+  },
+  "type": "module"
 }

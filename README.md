@@ -19,7 +19,6 @@
 </div>
 <hr />
 
-
 ## Table of Contents
 
 * [Install](#install)
@@ -67,7 +66,6 @@
 * [Contributors](#contributors)
 * [License](#license)
 
-
 ## Install
 
 ```sh
@@ -81,7 +79,6 @@ npm install tangerine undici
 - const resolver = new dns.promises.Resolver();
 +const resolver = new Tangerine();
 ```
-
 
 ## Foreword
 
@@ -119,7 +116,6 @@ After years of using the Node.js internal DNS module, we ran into these recurrin
 ### What projects were used for inspiration
 
 Thanks to the authors of [dohdec](https://github.com/hildjj/dohdec), [dns-packet](https://github.com/mafintosh/dns-packet), [dns2](https://github.com/song940/node-dns), and [native-dnssec-dns](https://github.com/EduardoRuizM/native-dnssec-dns) – which made this project possible and were used for inspiration.
-
 
 ## Features
 
@@ -159,7 +155,6 @@ All existing <code>syscall</code> values have been preserved:
 * `resolveSoa` → `querySoa`
 * `reverse` → `getHostByAddr`
 
-
 ## Usage and Examples
 
 ### ECMAScript modules (ESM)
@@ -187,7 +182,6 @@ const tangerine = new Tangerine();
 
 tangerine.resolve('forwardemail.net').then(console.log);
 ```
-
 
 ## API
 
@@ -369,7 +363,6 @@ console.log('mx', mx);
 
 **Pull requests are welcome to add support for other `rrtype` values for this method.**
 
-
 ## Options
 
 Similar to the `options` argument from `new dns.promises.Resolver(options)` invocation – :tangerine: Tangerine also has its own options with default `dns` behavior mirrored. See [index.js](https://github.com/forwardemail/nodejs-dns-over-https-tangerine/blob/main/index.js) for more insight into how these options work.
@@ -397,8 +390,7 @@ Similar to the `options` argument from `new dns.promises.Resolver(options)` invo
 | `setCacheArgs`            | `Function`                                                                    | `(key, result) => []`                                                                                                                       | This is a helper function used for cache store providers such as [ioredis](https://github.com/luin/ioredis) or [lru-cache](https://github.com/isaacs/node-lru-cache) which support more than two arguments to `cache.set()` function.  See [Cache](#cache) documentation below for more insight and examples into how this works.  You may want to set this to something such as `(key, result) => [ 'PX', Math.round(result.ttl * 1000) ]` if you are using `ioredis`. |
 | `returnHTTPErrors`        | `Boolean`                                                                     | `false`                                                                                                                                     | Whether to return HTTP errors instead of mapping them to corresponding DNS errors.                                                                                                                                                                                                                                                                                                                                                                                      |
 | `smartRotate`             | `Boolean`                                                                     | `true`                                                                                                                                      | Whether to do smart server rotation if servers fail.                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| `defaultHTTPErrorMessage` | `String`                                                                      | `"Unsuccessful HTTP response"`                                                                                                              | Default fallback message if `statusCode` returned from HTTP request was not found in [http.STATUS_CODES](https://nodejs.org/api/http.html#httpstatus_codes).                                                                                                                                                                                                                                                                                                            |
-
+| `defaultHTTPErrorMessage` | `String`                                                                      | `"Unsuccessful HTTP response"`                                                                                                              | Default fallback message if `statusCode` returned from HTTP request was not found in [http.STATUS\_CODES](https://nodejs.org/api/http.html#httpstatus_codes).                                                                                                                                                                                                                                                                                                            |
 
 ## Cache
 
@@ -468,7 +460,6 @@ await tangerine.resolve('forwardemail.net'); // uses cached value
 
 This purge cache feature is useful for DNS records that have recently changed and have had their caches purged at the relevant DNS provider (e.g. [Cloudflare's Purge Cache tool](https://1.1.1.1/purge-cache/)).
 
-
 ## Compatibility
 
 The only known compatibility issue is for locally running DNS servers that have wildcard DNS matching.
@@ -476,7 +467,6 @@ The only known compatibility issue is for locally running DNS servers that have 
 If you are using `dnsmasq` with a wildcard match on "localhost" to "127.0.0.1", then the results may vary.  For example, if your `dnsmasq` configuration has `address=/localhost/127.0.0.1`, then any match of `localhost` will resolve to `127.0.0.1`.  This means that `dns.promises.lookup('foo.localhost')` will return `127.0.0.1` – however with :tangerine: Tangerine it will not return a value.
 
 The reason is because :tangerine: Tangerine only looks at either `/etc/hosts` (macOS/Linux) and `C:/Windows/System32/drivers/etc/hosts` (Windows).  It does not lookup BIND, dnsmasq, or other configurations running locally.  We would welcome a PR to resolve this (see `isCI` usage in test folder) – however it is a non-issue, as the workaround is to simply append a new line to the hostfile of `127.0.0.1 foo.localhost`.
-
 
 ## Debugging
 
@@ -491,7 +481,6 @@ If you run into issues while using :tangerine: Tangerine, then these recommendat
 * Pass a verbose logger as the `logger` option, e.g. `logger: console` (see [Options](#options) above).
 
 * Assuming you are not allergic, try eating a [nutritious](https://en.wikipedia.org/wiki/Tangerine#Nutrition) :tangerine: tangerine.
-
 
 ## Benchmarks
 
@@ -590,11 +579,11 @@ dns.promises.reverse with caching x 5,164,258 ops/sec ±0.96% (86 runs sampled)
 +Fastest without caching is: tangerine.reverse GET without caching
 ```
 
----
+***
 
 You can also [run the benchmarks yourself](#benchmarks).
 
----
+***
 
 Provided below are additional benchmark tests we have run:
 
@@ -712,18 +701,15 @@ phin POST request x 714 ops/sec ±17.39% (62 runs sampled)
 Fastest is undici GET request
 ```
 
-
 ## Contributors
 
 | Name              | Website                    |
 | ----------------- | -------------------------- |
 | **Forward Email** | <https://forwardemail.net> |
 
-
 ## License
 
 [MIT](LICENSE) © [Forward Email](https://forwardemail.net)
-
 
 ##
 

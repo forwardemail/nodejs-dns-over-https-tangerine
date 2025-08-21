@@ -1,40 +1,62 @@
-const dns = require('node:dns');
-const http = require('node:http');
-const os = require('node:os');
-const process = require('node:process');
-const { Buffer } = require('node:buffer');
-const { debuglog } = require('node:util');
-const { getEventListeners, setMaxListeners } = require('node:events');
-const { isIP, isIPv4, isIPv6 } = require('node:net');
-const { toASCII } = require('punycode/');
-const autoBind = require('auto-bind');
-const getStream = require('get-stream');
-const hostile = require('hostile');
-const ipaddr = require('ipaddr.js');
-const isStream = require('is-stream');
-const mergeOptions = require('merge-options');
-const pMap = require('p-map');
-const pWaitFor = require('p-wait-for');
-const packet = require('dns-packet');
-const semver = require('semver');
-const { getService } = require('port-numbers');
-const pkg = require('./package.json');
+import dns from 'node:dns';
+import http from 'node:http';
+import os from 'node:os';
+import process from 'node:process';
+import { Buffer } from 'node:buffer';
+import { debuglog } from 'node:util';
+import { getEventListeners, setMaxListeners } from 'node:events';
+import { isIP, isIPv4, isIPv6 } from 'node:net';
+import { toASCII } from 'punycode/punycode.es6.js';
+import autoBind from 'auto-bind';
+import getStream from 'get-stream';
+import hostile from 'hostile';
+import ipaddr from 'ipaddr.js';
+import { isStream } from 'is-stream';
+import mergeOptions from 'merge-options';
+import pMap from 'p-map';
+import pWaitFor from 'p-wait-for';
+import packet from 'dns-packet';
+import semver from 'semver';
+import { request as undiciRequest } from 'undici';
+import * as dohdec from 'dohdec';
+import isPrivateIP from 'private-ip';
+import portNumbers from 'port-numbers' with { type: 'json' };
+import pkg from './package.json' with { type: 'json' };
+
+// Service name mapping to match Node.js built-in behavior
+const serviceNameMap = {
+  'www-http': 'http',
+  smtp: 'smtp',
+  domain: 'domain'
+  // Add more mappings as needed
+};
+
+// Create a getService function compatible with the old API
+const getService = (port, protocol = 'tcp') => {
+  const key = `${port}/${protocol}`;
+  const serviceInfo = portNumbers[key];
+  if (serviceInfo) {
+    let name = serviceInfo[0];
+    // Apply mapping to match Node.js behavior
+    name = serviceNameMap[name] || name;
+    return { name };
+  }
+
+  // Try UDP if TCP not found and no protocol specified
+  if (protocol === 'tcp') {
+    const udpKey = `${port}/udp`;
+    const udpInfo = portNumbers[udpKey];
+    if (udpInfo) {
+      let name = udpInfo[0];
+      name = serviceNameMap[name] || name;
+      return { name };
+    }
+  }
+
+  return { name: '' };
+};
 
 const debug = debuglog('tangerine');
-
-// dynamically import dohdec
-let dohdec;
-// eslint-disable-next-line unicorn/prefer-top-level-await
-import('dohdec').then((obj) => {
-  dohdec = obj;
-});
-
-// dynamically import private-ip
-let isPrivateIP;
-// eslint-disable-next-line unicorn/prefer-top-level-await
-import('private-ip').then((obj) => {
-  isPrivateIP = obj.default;
-});
 
 const HOSTFILE = hostile
   .get(true)
@@ -44,19 +66,18 @@ const HOSTFILE = hostile
 const HOSTS = [];
 const hosts = hostile.get();
 for (const line of hosts) {
-  const [ip, str] = line;
-  const hosts = str.split(' ');
+  const [ip, string_] = line;
+  const hosts = string_.split(' ');
   HOSTS.push({ ip, hosts });
 }
 
 // <https://github.com/szmarczak/cacheable-lookup/pull/76>
 class Tangerine extends dns.promises.Resolver {
   static HOSTFILE = HOSTFILE;
-
   static HOSTS = HOSTS;
 
   static isValidPort(port) {
-    return Number.isSafeInteger(port) && port >= 0 && port <= 65535;
+    return Number.isSafeInteger(port) && port >= 0 && port <= 65_535;
   }
 
   static CTYPE_BY_VALUE = {
@@ -77,20 +98,29 @@ class Tangerine extends dns.promises.Resolver {
     let hasIPv4 = false;
     let hasIPv6 = false;
     for (const key of Object.keys(networkInterfaces)) {
-      for (const obj of networkInterfaces[key]) {
-        if (!obj.internal) {
-          if (obj.family === 'IPv4') {
+      for (const object of networkInterfaces[key]) {
+        if (!object.internal) {
+          if (object.family === 'IPv4') {
             hasIPv4 = true;
-          } else if (obj.family === 'IPv6') {
+          } else if (object.family === 'IPv6') {
             hasIPv6 = true;
           }
         }
       }
     }
 
-    if (hasIPv4 && hasIPv6) return 0;
-    if (hasIPv4) return 4;
-    if (hasIPv6) return 6;
+    if (hasIPv4 && hasIPv6) {
+      return 0;
+    }
+
+    if (hasIPv4) {
+      return 4;
+    }
+
+    if (hasIPv6) {
+      return 6;
+    }
+
     // NOTE: should this be an edge case where we return empty results (?)
     return 0;
   }
@@ -104,43 +134,48 @@ class Tangerine extends dns.promises.Resolver {
   // NOTE: we can most likely move to AggregateError instead
   //
   static combineErrors(errors) {
-    let err;
+    let error;
     if (errors.length === 1) {
-      err = errors[0];
+      error = errors[0];
     } else {
-      err = new Error(
-        [...new Set(errors.map((e) => e.message).filter(Boolean))].join('; ')
+      error = new Error(
+        [
+          ...new Set(errors.map((error_) => error_.message).filter(Boolean))
+        ].join('; ')
       );
-      err.stack = [...new Set(errors.map((e) => e.stack).filter(Boolean))].join(
-        '\n\n'
-      );
+      error.stack = [
+        ...new Set(errors.map((error_) => error_.stack).filter(Boolean))
+      ].join('\n\n');
 
-      // if all errors had `name` and they were all the same then preserve it
+      // If all errors had `name` and they were all the same then preserve it
       if (
         errors[0].name !== undefined &&
-        errors.every((e) => e.name === errors[0].name)
-      )
-        err.name = errors[0].name;
+        errors.every((error_) => error_.name === errors[0].name)
+      ) {
+        error.name = errors[0].name;
+      }
 
-      // if all errors had `code` and they were all the same then preserve it
+      // If all errors had `code` and they were all the same then preserve it
       if (
         errors[0].code !== undefined &&
-        errors.every((e) => e.code === errors[0].code)
-      )
-        err.code = errors[0].code;
+        errors.every((error_) => error_.code === errors[0].code)
+      ) {
+        error.code = errors[0].code;
+      }
 
-      // if all errors had `errno` and they were all the same then preserve it
+      // If all errors had `errno` and they were all the same then preserve it
       if (
         errors[0].errno !== undefined &&
-        errors.every((e) => e.errno === errors[0].errno)
-      )
-        err.errno = errors[0].errno;
+        errors.every((error_) => error_.errno === errors[0].errno)
+      ) {
+        error.errno = errors[0].errno;
+      }
 
-      // preserve original errors
-      err.errors = errors;
+      // Preserve original errors
+      error.errors = errors;
     }
 
-    return err;
+    return error;
   }
 
   static CODES = new Set([
@@ -170,7 +205,6 @@ class Tangerine extends dns.promises.Resolver {
     dns.TIMEOUT,
     'EINVAL'
   ]);
-
   static DNS_TYPES = new Set([
     'A',
     'AAAA',
@@ -184,7 +218,6 @@ class Tangerine extends dns.promises.Resolver {
     'SRV',
     'TXT'
   ]);
-
   // <https://www.iana.org/assignments/dns-parameters/dns-parameters.xhtml#dns-parameters-4>
   static TYPES = new Set([
     'A',
@@ -277,7 +310,6 @@ class Tangerine extends dns.promises.Resolver {
     'X25',
     'ZONEMD'
   ]);
-
   static ANY_TYPES = [
     'A',
     'AAAA',
@@ -290,7 +322,6 @@ class Tangerine extends dns.promises.Resolver {
     'SRV',
     'TXT'
   ];
-
   static NETWORK_ERROR_CODES = new Set([
     'ENETDOWN',
     'ENETRESET',
@@ -299,11 +330,9 @@ class Tangerine extends dns.promises.Resolver {
     'ECONNREFUSED',
     'ENETUNREACH'
   ]);
-
   static RETRY_STATUS_CODES = new Set([
     408, 413, 429, 500, 502, 503, 504, 521, 522, 524
   ]);
-
   static RETRY_ERROR_CODES = new Set([
     'ETIMEOUT',
     'ETIMEDOUT',
@@ -317,8 +346,7 @@ class Tangerine extends dns.promises.Resolver {
     'ENETUNREACH',
     'EAI_AGAIN'
   ]);
-
-  // sourced from node, superagent, got, axios, and fetch
+  // Sourced from node, superagent, got, axios, and fetch
   // <https://github.com/nodejs/node/issues/14554>
   // <https://github.com/nodejs/node/issues/38361#issuecomment-1046151452>
   // <https://github.com/axios/axios/blob/bdf493cf8b84eb3e3440e72d5725ba0f138e0451/lib/cancel/CanceledError.js#L17>
@@ -341,20 +369,25 @@ class Tangerine extends dns.promises.Resolver {
   static createError(name, rrtype, code = dns.BADRESP, errno) {
     const syscall = this.getSysCall(rrtype);
 
-    if (this.ABORT_ERROR_CODES.has(code)) code = dns.CANCELLED;
-    else if (this.NETWORK_ERROR_CODES.has(code)) code = dns.CONNREFUSED;
-    else if (this.RETRY_ERROR_CODES.has(code)) code = dns.TIMEOUT;
-    else if (!this.CODES.has(code)) code = dns.BADRESP;
+    if (this.ABORT_ERROR_CODES.has(code)) {
+      code = dns.CANCELLED;
+    } else if (this.NETWORK_ERROR_CODES.has(code)) {
+      code = dns.CONNREFUSED;
+    } else if (this.RETRY_ERROR_CODES.has(code)) {
+      code = dns.TIMEOUT;
+    } else if (!this.CODES.has(code)) {
+      code = dns.BADRESP;
+    }
 
-    const err = new Error(`${syscall} ${code} ${name}`);
-    err.hostname = name;
-    err.syscall = syscall;
-    err.code = code;
-    err.errno = errno || undefined;
-    return err;
+    const error = new Error(`${syscall} ${code} ${name}`);
+    error.hostname = name;
+    error.syscall = syscall;
+    error.code = code;
+    error.errno = errno || undefined;
+    return error;
   }
 
-  constructor(options = {}, request = require('undici').request) {
+  constructor(options = {}, request = undiciRequest) {
     const timeout =
       options.timeout && options.timeout !== -1 ? options.timeout : 5000;
     const tries = options.tries || 4;
@@ -364,10 +397,11 @@ class Tangerine extends dns.promises.Resolver {
       tries
     });
 
-    if (typeof request !== 'function')
-      throw new Error(
+    if (typeof request !== 'function') {
+      throw new TypeError(
         'Request option must be a function (e.g. `undici.request` or `got`)'
       );
+    }
 
     this.request = request;
 
@@ -381,7 +415,7 @@ class Tangerine extends dns.promises.Resolver {
         timeout,
         tries,
 
-        // dns servers will optionally retry in series
+        // Dns servers will optionally retry in series
         // and servers that error will get shifted to the end of list
         servers: new Set(['1.1.1.1', '1.0.0.1']),
         requestOptions: {
@@ -407,80 +441,88 @@ class Tangerine extends dns.promises.Resolver {
         // https://github.com/cabinjs/cabin
         // https://github.com/cabinjs/axe
         logger: false,
-        // default id generator
+        // Default id generator
         // (e.g. set to a synchronous or async function such as `() => Tangerine.getRandomInt(1, 65534)`)
         id: 0,
-        // concurrency for `resolveAny` (defaults to # of CPU's)
+        // Concurrency for `resolveAny` (defaults to # of CPU's)
         concurrency: os.cpus().length,
-        // ipv4 and ipv6 default addresses (from dns defaults)
+        // Ipv4 and ipv6 default addresses (from dns defaults)
         ipv4: '0.0.0.0',
         ipv6: '::0',
         ipv4Port: undefined,
         ipv6Port: undefined,
-        // cache mapping (e.g. txt -> Map/keyv/redis instance) - see below
+        // Cache mapping (e.g. txt -> Map/keyv/redis instance) - see below
         cache: new Map(),
         // <https://developers.cloudflare.com/dns/manage-dns-records/reference/ttl/>
         defaultTTLSeconds: 300,
-        maxTTLSeconds: 86400,
-        // default is to support ioredis
+        maxTTLSeconds: 86_400,
+        // Default is to support ioredis
         // setCacheArgs(key, result) {
         setCacheArgs() {
-          // also you have access to `result.expires` which is is ms since epoch
+          // Also you have access to `result.expires` which is is ms since epoch
           // (can be converted to Date via `new Date(result.expires)`)
           // return ['PX', Math.round(result.ttl * 1000)];
           return [];
         },
-        // whether to do 1:1 HTTP -> DNS error mapping
+        // Whether to do 1:1 HTTP -> DNS error mapping
         returnHTTPErrors: false,
-        // whether to smart rotate and bump-to-end servers that have issues
+        // Whether to smart rotate and bump-to-end servers that have issues
         smartRotate: true,
-        // fallback if status code was not found in http.STATUS_CODES
+        // Fallback if status code was not found in http.STATUS_CODES
         defaultHTTPErrorMessage: 'Unsuccessful HTTP response'
       },
       options
     );
 
-    // timeout must be >= 0
-    if (!Number.isFinite(this.options.timeout) || this.options.timeout < 0)
+    // Timeout must be >= 0
+    if (!Number.isFinite(this.options.timeout) || this.options.timeout < 0) {
       throw new Error('Timeout must be >= 0');
+    }
 
-    // tries must be >= 1
-    if (!Number.isFinite(this.options.tries) || this.options.tries < 1)
+    // Tries must be >= 1
+    if (!Number.isFinite(this.options.tries) || this.options.tries < 1) {
       throw new Error('Tries must be >= 1');
+    }
 
-    // request option method must be either GET or POST
+    // Request option method must be either GET or POST
     if (
       !['get', 'post'].includes(
         this.options.requestOptions.method.toLowerCase()
       )
-    )
+    ) {
       throw new Error('Request options method must be either GET or POST');
+    }
 
-    // perform validation by re-using `setServers` method
+    // Perform validation by re-using `setServers` method
     this.setServers([...this.options.servers]);
 
     if (
       !(this.options.servers instanceof Set) ||
       this.options.servers.size === 0
-    )
+    ) {
       throw new Error(
         'Servers must be an Array or Set with at least one server'
       );
+    }
 
-    if (!['http', 'https'].includes(this.options.protocol))
+    if (!['http', 'https'].includes(this.options.protocol)) {
       throw new Error('Protocol must be http or https');
+    }
 
-    if (!['verbatim', 'ipv4first'].includes(this.options.dnsOrder))
+    if (!['verbatim', 'ipv4first'].includes(this.options.dnsOrder)) {
       throw new Error('DNS order must be either verbatim or ipv4first');
+    }
 
-    // if `cache: false` then caching is disabled
+    // If `cache: false` then caching is disabled
     // but note that this doesn't disable `got` dnsCache which is separate
     // so to turn that off, you need to supply `dnsCache: undefined` in `got` object (?)
-    if (this.options.cache === true) this.options.cache = new Map();
+    if (this.options.cache === true) {
+      this.options.cache = new Map();
+    }
 
-    // convert `false` logger option into noop
+    // Convert `false` logger option into noop
     // <https://github.com/breejs/bree/issues/147>
-    if (this.options.logger === false)
+    if (this.options.logger === false) {
       this.options.logger = {
         /* istanbul ignore next */
         info() {},
@@ -489,8 +531,9 @@ class Tangerine extends dns.promises.Resolver {
         /* istanbul ignore next */
         error() {}
       };
+    }
 
-    // manage set of abort controllers
+    // Manage set of abort controllers
     this.abortControllers = new Set();
 
     //
@@ -502,36 +545,38 @@ class Tangerine extends dns.promises.Resolver {
   }
 
   setLocalAddress(ipv4, ipv6) {
-    // ipv4 = default => '0.0.0.0'
+    // Ipv4 = default => '0.0.0.0'
     // ipv6 = default => '::0'
     if (ipv4) {
       if (typeof ipv4 !== 'string') {
-        const err = new TypeError(
+        const error = new TypeError(
           'The "ipv4" argument must be of type string.'
         );
-        err.code = 'ERR_INVALID_ARG_TYPE';
-        throw err;
+        error.code = 'ERR_INVALID_ARG_TYPE';
+        throw error;
       }
 
-      // if port specified then split it apart
+      // If port specified then split it apart
       let port;
 
-      if (ipv4.includes(':')) [ipv4, port] = ipv4.split(':');
-
-      if (!isIPv4(ipv4)) {
-        const err = new TypeError('Invalid IP address.');
-        err.code = 'ERR_INVALID_ARG_TYPE';
-        throw err;
+      if (ipv4.includes(':')) {
+        [ipv4, port] = ipv4.split(':');
       }
 
-      // not sure if there's a built-in way with Node.js to do this (?)
+      if (!isIPv4(ipv4)) {
+        const error = new TypeError('Invalid IP address.');
+        error.code = 'ERR_INVALID_ARG_TYPE';
+        throw error;
+      }
+
+      // Not sure if there's a built-in way with Node.js to do this (?)
       if (port) {
         port = Number(port);
         // <https://github.com/leecjson/node-is-valid-port/blob/2da250b23e0d83bcfc042b44fa7cabdea1984a73/index.js#L3-L7>
         if (!this.constructor.isValidPort(port)) {
-          const err = new TypeError('Invalid port.');
-          err.code = 'ERR_INVALID_ARG_TYPE';
-          throw err;
+          const error = new TypeError('Invalid port.');
+          error.code = 'ERR_INVALID_ARG_TYPE';
+          throw error;
         }
       }
 
@@ -541,38 +586,38 @@ class Tangerine extends dns.promises.Resolver {
 
     if (ipv6) {
       if (typeof ipv6 !== 'string') {
-        const err = new TypeError(
+        const error = new TypeError(
           'The "ipv6" argument must be of type string.'
         );
-        err.code = 'ERR_INVALID_ARG_TYPE';
-        throw err;
+        error.code = 'ERR_INVALID_ARG_TYPE';
+        throw error;
       }
 
-      // if port specified then split it apart
+      // If port specified then split it apart
       let port;
 
-      // if it starts with `[` then we can assume it's encoded as `[IPv6]` or `[IPv6]:PORT`
+      // If it starts with `[` then we can assume it's encoded as `[IPv6]` or `[IPv6]:PORT`
       if (ipv6.startsWith('[')) {
         const lastIndex = ipv6.lastIndexOf(']');
         port = ipv6.slice(lastIndex + 2);
         ipv6 = ipv6.slice(1, lastIndex);
       }
 
-      // not sure if there's a built-in way with Node.js to do this (?)
+      // Not sure if there's a built-in way with Node.js to do this (?)
       if (port) {
         port = Number(port);
         // <https://github.com/leecjson/node-is-valid-port/blob/2da250b23e0d83bcfc042b44fa7cabdea1984a73/index.js#L3-L7>
-        if (!(Number.isSafeInteger(port) && port >= 0 && port <= 65535)) {
-          const err = new TypeError('Invalid port.');
-          err.code = 'ERR_INVALID_ARG_TYPE';
-          throw err;
+        if (!(Number.isSafeInteger(port) && port >= 0 && port <= 65_535)) {
+          const error = new TypeError('Invalid port.');
+          error.code = 'ERR_INVALID_ARG_TYPE';
+          throw error;
         }
       }
 
       if (!isIPv6(ipv6)) {
-        const err = new TypeError('Invalid IP address.');
-        err.code = 'ERR_INVALID_ARG_TYPE';
-        throw err;
+        const error = new TypeError('Invalid IP address.');
+        error.code = 'ERR_INVALID_ARG_TYPE';
+        throw error;
       }
 
       this.options.ipv6 = ipv6;
@@ -580,23 +625,25 @@ class Tangerine extends dns.promises.Resolver {
     }
   }
 
-  // eslint-disable-next-line complexity
+
   async lookup(name, options = {}) {
-    // validate name
+    // Validate name
     if (typeof name !== 'string') {
-      const err = new TypeError('The "name" argument must be of type string.');
-      err.code = 'ERR_INVALID_ARG_TYPE';
-      throw err;
+      const error = new TypeError(
+        'The "name" argument must be of type string.'
+      );
+      error.code = 'ERR_INVALID_ARG_TYPE';
+      throw error;
     }
 
-    // if options is an integer, it must be 4 or 6
+    // If options is an integer, it must be 4 or 6
     if (typeof options === 'number') {
       if (options !== 0 && options !== 4 && options !== 6) {
-        const err = new TypeError(
+        const error = new TypeError(
           `The argument 'family' must be one of: 0, 4, 6. Received ${options}`
         );
-        err.code = 'ERR_INVALID_ARG_TYPE';
-        throw err;
+        error.code = 'ERR_INVALID_ARG_TYPE';
+        throw error;
       }
 
       options = { family: options };
@@ -604,40 +651,45 @@ class Tangerine extends dns.promises.Resolver {
       options?.family !== undefined &&
       ![0, 4, 6, 'IPv4', 'IPv6'].includes(options.family)
     ) {
-      // validate family
-      const err = new TypeError(
+      // Validate family
+      const error = new TypeError(
         `The argument 'family' must be one of: 0, 4, 6. Received ${options.family}`
       );
-      err.code = 'ERR_INVALID_ARG_TYPE';
-      throw err;
+      error.code = 'ERR_INVALID_ARG_TYPE';
+      throw error;
     }
 
-    if (options?.family === 'IPv4') options.family = 4;
-    else if (options?.family === 'IPv6') options.family = 6;
+    if (options?.family === 'IPv4') {
+      options.family = 4;
+    } else if (options?.family === 'IPv6') {
+      options.family = 6;
+    }
 
-    if (typeof options.family !== 'number') options.family = 0;
+    if (typeof options.family !== 'number') {
+      options.family = 0;
+    }
 
-    // validate hints
-    // eslint-disable-next-line no-bitwise
+    // Validate hints
+
     if ((options?.hints & ~(dns.ADDRCONFIG | dns.ALL | dns.V4MAPPED)) !== 0) {
-      const err = new TypeError(
+      const error = new TypeError(
         `The argument 'hints' is invalid. Received ${options.hints}`
       );
-      err.code = 'ERR_INVALID_ARG_TYPE';
-      throw err;
+      error.code = 'ERR_INVALID_ARG_TYPE';
+      throw error;
     }
 
     if (name === '.') {
-      const err = this.constructor.createError(name, '', dns.NOTFOUND);
-      // remap and perform syscall
-      err.syscall = 'getaddrinfo';
-      err.message = err.message.replace('query', 'getaddrinfo');
-      err.errno = -3008; // <-- ?
+      const error = this.constructor.createError(name, '', dns.NOTFOUND);
+      // Remap and perform syscall
+      error.syscall = 'getaddrinfo';
+      error.message = error.message.replace('query', 'getaddrinfo');
+      error.errno = -3008; // <-- ?
       // err.errno = -3007;
-      throw err;
+      throw error;
     }
 
-    // purge cache support
+    // Purge cache support
     let purgeCache;
     if (options?.purgeCache) {
       purgeCache = true;
@@ -651,13 +703,13 @@ class Tangerine extends dns.promises.Resolver {
           break;
         }
 
-        // eslint-disable-next-line no-bitwise
+
         case dns.ADDRCONFIG | dns.V4MAPPED: {
           options.family = this.constructor.getAddrConfigTypes();
           break;
         }
 
-        // eslint-disable-next-line no-bitwise
+
         case dns.ADDRCONFIG | dns.V4MAPPED | dns.ALL: {
           options.family = this.constructor.getAddrConfigTypes();
 
@@ -686,18 +738,27 @@ class Tangerine extends dns.promises.Resolver {
     const lower = name.toLowerCase();
 
     for (const rule of this.constructor.HOSTS) {
-      if (rule.hosts.every((h) => h.toLowerCase() !== lower)) continue;
+      if (rule.hosts.every((h) => h.toLowerCase() !== lower)) {
+        continue;
+      }
+
       const type = isIP(rule.ip);
       if (!resolve4 && type === 4) {
-        if (!Array.isArray(resolve4)) resolve4 = [rule.ip];
-        else if (!resolve4.includes(rule.ip)) resolve4.push([rule.ip]);
+        if (!Array.isArray(resolve4)) {
+          resolve4 = [rule.ip];
+        } else if (!resolve4.includes(rule.ip)) {
+          resolve4.push([rule.ip]);
+        }
       } else if (!resolve6 && type === 6) {
-        if (!Array.isArray(resolve6)) resolve6 = [rule.ip];
-        else if (!resolve6.includes(rule.ip)) resolve6.push(rule.ip);
+        if (!Array.isArray(resolve6)) {
+          resolve6 = [rule.ip];
+        } else if (!resolve6.includes(rule.ip)) {
+          resolve6.push(rule.ip);
+        }
       }
     }
 
-    // safeguard (matches c-ares)
+    // Safeguard (matches c-ares)
     if (lower === 'localhost' || lower === 'localhost.') {
       resolve4 ||= ['127.0.0.1'];
       resolve6 ||= ['::1'];
@@ -711,22 +772,25 @@ class Tangerine extends dns.promises.Resolver {
       resolve4 = [];
     }
 
-    // resolve the first A or AAAA record (conditionally)
-    const results = await Promise.all(
-      [
-        Array.isArray(resolve4)
-          ? Promise.resolve(resolve4)
-          : this.resolve4(name, { purgeCache, noThrowOnNODATA: true }),
-        Array.isArray(resolve6)
-          ? Promise.resolve(resolve6)
-          : this.resolve6(name, { purgeCache, noThrowOnNODATA: true })
-      ].map((p) => p.catch((err) => err))
+    // Resolve the first A or AAAA record (conditionally)
+    const promises = [
+      Array.isArray(resolve4)
+        ? Promise.resolve(resolve4)
+        : this.resolve4(name, { purgeCache, noThrowOnNODATA: true }),
+      Array.isArray(resolve6)
+        ? Promise.resolve(resolve6)
+        : this.resolve6(name, { purgeCache, noThrowOnNODATA: true })
+    ];
+
+    const results = await Promise.allSettled(promises);
+    const resolvedResults = results.map((result) =>
+      result.status === 'fulfilled' ? result.value : result.reason
     );
 
     const errors = [];
     let answers = [];
 
-    for (const result of results) {
+    for (const result of resolvedResults) {
       if (result instanceof Error) {
         errors.push(result);
       } else {
@@ -737,39 +801,40 @@ class Tangerine extends dns.promises.Resolver {
     if (
       answers.length === 0 &&
       errors.length > 0 &&
-      errors.every((e) => e.code === errors[0].code)
+      errors.every((error_) => error_.code === errors[0].code)
     ) {
-      const err = this.constructor.createError(
+      const error = this.constructor.createError(
         name,
         '',
         errors[0].code === dns.BADNAME ? dns.NOTFOUND : errors[0].code
       );
-      // remap and perform syscall
-      err.syscall = 'getaddrinfo';
-      err.message = err.message.replace('query', 'getaddrinfo');
-      err.errno = -3008;
-      throw err;
+      // Remap and perform syscall
+      error.syscall = 'getaddrinfo';
+      error.message = error.message.replace('query', 'getaddrinfo');
+      error.errno = -3008;
+      throw error;
     }
 
-    // default node behavior seems to return IPv4 by default always regardless
-    if (answers.length > 0)
+    // Default node behavior seems to return IPv4 by default always regardless
+    if (answers.length > 0) {
       answers =
         answers[0].length > 0 &&
         (options.family === undefined || options.family === 0)
           ? answers[0]
           : answers.flat();
-
-    // if no results then throw ENODATA
-    if (answers.length === 0) {
-      const err = this.constructor.createError(name, '', dns.NODATA);
-      // remap and perform syscall
-      err.syscall = 'getaddrinfo';
-      err.message = err.message.replace('query', 'getaddrinfo');
-      err.errno = -3008;
-      throw err;
     }
 
-    // respect options from dns module
+    // If no results then throw ENODATA
+    if (answers.length === 0) {
+      const error = this.constructor.createError(name, '', dns.NODATA);
+      // Remap and perform syscall
+      error.syscall = 'getaddrinfo';
+      error.message = error.message.replace('query', 'getaddrinfo');
+      error.errno = -3008;
+      throw error;
+    }
+
+    // Respect options from dns module
     // <https://nodejs.org/api/dns.html#dnspromiseslookuphostname-options>
     // - [x] `family` (4, 6, or 0, default is 0)
     // - [x] `hints` multiple flags may be passed by bitwise OR'ing values
@@ -791,10 +856,15 @@ class Tangerine extends dns.promises.Resolver {
     if (options.hints) {
       switch (options.hints) {
         case dns.V4MAPPED: {
-          if (options.family === 6 && !answers.some((answer) => isIPv6(answer)))
+          if (
+            options.family === 6 &&
+            !answers.some((answer) => isIPv6(answer))
+          ) {
             answers = answers.map((answer) =>
               ipaddr.parse(answer).toIPv4MappedAddress().toString()
             );
+          }
+
           break;
         }
 
@@ -803,31 +873,46 @@ class Tangerine extends dns.promises.Resolver {
           break;
         }
 
-        // eslint-disable-next-line no-bitwise
+
         case dns.ADDRCONFIG | dns.V4MAPPED: {
-          if (options.family === 6 && !answers.some((answer) => isIPv6(answer)))
+          if (
+            options.family === 6 &&
+            !answers.some((answer) => isIPv6(answer))
+          ) {
             answers = answers.map((answer) =>
               ipaddr.parse(answer).toIPv4MappedAddress().toString()
             );
+          }
+
           break;
         }
 
-        // eslint-disable-next-line no-bitwise
+
         case dns.V4MAPPED | dns.ALL: {
-          if (options.family === 6 && !answers.some((answer) => isIPv6(answer)))
+          if (
+            options.family === 6 &&
+            !answers.some((answer) => isIPv6(answer))
+          ) {
             answers = answers.map((answer) =>
               ipaddr.parse(answer).toIPv4MappedAddress().toString()
             );
+          }
+
           options.all = true;
           break;
         }
 
-        // eslint-disable-next-line no-bitwise
+
         case dns.ADDRCONFIG | dns.V4MAPPED | dns.ALL: {
-          if (options.family === 6 && !answers.some((answer) => isIPv6(answer)))
+          if (
+            options.family === 6 &&
+            !answers.some((answer) => isIPv6(answer))
+          ) {
             answers = answers.map((answer) =>
               ipaddr.parse(answer).toIPv4MappedAddress().toString()
             );
+          }
+
           options.all = true;
 
           break;
@@ -839,10 +924,11 @@ class Tangerine extends dns.promises.Resolver {
       }
     }
 
-    if (options.family === 4)
+    if (options.family === 4) {
       answers = answers.filter((answer) => isIPv4(answer));
-    else if (options.family === 6)
+    } else if (options.family === 6) {
       answers = answers.filter((answer) => isIPv6(answer));
+    }
 
     //
     // respect sort order from `setDefaultResultOrder` method
@@ -853,8 +939,14 @@ class Tangerine extends dns.promises.Resolver {
       answers = answers.sort((a, b) => {
         const aFamily = isIP(a);
         const bFamily = isIP(b);
-        if (aFamily < bFamily) return -1;
-        if (aFamily > bFamily) return 1;
+        if (aFamily < bFamily) {
+          return -1;
+        }
+
+        if (aFamily > bFamily) {
+          return 1;
+        }
+
         return 0;
       });
     }
@@ -870,32 +962,32 @@ class Tangerine extends dns.promises.Resolver {
   // <https://man7.org/linux/man-pages/man3/getnameinfo.3.html>
   async lookupService(address, port, abortController, purgeCache = false) {
     if (!address || !port) {
-      const err = new TypeError(
+      const error = new TypeError(
         'The "address" and "port" arguments must be specified.'
       );
-      err.code = 'ERR_MISSING_ARGS';
-      throw err;
+      error.code = 'ERR_MISSING_ARGS';
+      throw error;
     }
 
     if (!isIP(address)) {
-      const err = new TypeError(
+      const error = new TypeError(
         `The argument 'address' is invalid. Received '${address}'`
       );
-      err.code = 'ERR_INVALID_ARG_VALUE';
-      throw err;
+      error.code = 'ERR_INVALID_ARG_VALUE';
+      throw error;
     }
 
     if (!this.constructor.isValidPort(port)) {
-      const err = new TypeError(
+      const error = new TypeError(
         `Port should be >= 0 and < 65536. Received ${port}.`
       );
-      err.code = 'ERR_SOCKET_BAD_PORT';
-      throw err;
+      error.code = 'ERR_SOCKET_BAD_PORT';
+      throw error;
     }
 
     const { name } = getService(port);
 
-    // reverse lookup
+    // Reverse lookup
     try {
       const [hostname] = await this.reverse(
         address,
@@ -903,31 +995,36 @@ class Tangerine extends dns.promises.Resolver {
         purgeCache
       );
       return { hostname, service: name };
-    } catch (err) {
-      err.syscall = 'getnameinfo';
-      throw err;
+    } catch (error) {
+      error.syscall = 'getnameinfo';
+      throw error;
     }
   }
 
   async reverse(ip, abortController, purgeCache = false) {
-    // basically reverse the IP and then perform PTR lookup
+    // Basically reverse the IP and then perform PTR lookup
     if (typeof ip !== 'string') {
-      const err = new TypeError('The "ip" argument must be of type string.');
-      err.code = 'ERR_INVALID_ARG_TYPE';
-      throw err;
+      const error = new TypeError('The "ip" argument must be of type string.');
+      error.code = 'ERR_INVALID_ARG_TYPE';
+      throw error;
     }
 
     if (!isIP(ip)) {
-      const err = this.constructor.createError(ip, '', 'EINVAL');
-      err.message = `getHostByAddr EINVAL ${err.hostname}`;
-      err.syscall = 'getHostByAddr';
-      err.errno = -22;
-      if (!ip) delete err.hostname;
-      throw err;
+      const error = this.constructor.createError(ip, '', 'EINVAL');
+      error.message = `getHostByAddr EINVAL ${error.hostname}`;
+      error.syscall = 'getHostByAddr';
+      error.errno = -22;
+      if (!ip) {
+        delete error.hostname;
+      }
+
+      throw error;
     }
 
-    // edge case where localhost IP returns matches
-    if (!isPrivateIP) await pWaitFor(() => Boolean(isPrivateIP));
+    // Edge case where localhost IP returns matches
+    if (!isPrivateIP) {
+      await pWaitFor(() => Boolean(isPrivateIP));
+    }
 
     const answers = new Set();
     let match = false;
@@ -941,17 +1038,21 @@ class Tangerine extends dns.promises.Resolver {
       }
     }
 
-    if (answers.size > 0 || match) return [...answers];
+    if (answers.size > 0 || match) {
+      return [...answers];
+    }
 
     // NOTE: we can prob remove this (?)
     // if (ip === '::1' || ip === '127.0.0.1') return [];
 
     // reverse the IP address
-    if (!dohdec) await pWaitFor(() => Boolean(dohdec));
+    if (!dohdec) {
+      await pWaitFor(() => Boolean(dohdec));
+    }
 
     const name = dohdec.DNSoverHTTPS.reverse(ip);
 
-    // perform resolvePTR
+    // Perform resolvePTR
     try {
       const answers = await this.resolve(
         name,
@@ -960,12 +1061,12 @@ class Tangerine extends dns.promises.Resolver {
         abortController
       );
       return answers;
-    } catch (err) {
-      // remap syscall
-      err.syscall = 'getHostByAddr';
-      err.message = `${err.syscall} ${err.code} ${ip}`;
-      err.hostname = ip;
-      throw err;
+    } catch (error) {
+      // Remap syscall
+      error.syscall = 'getHostByAddr';
+      error.message = `${error.syscall} ${error.code} ${ip}`;
+      error.hostname = ip;
+      throw error;
     }
   }
 
@@ -1038,7 +1139,7 @@ class Tangerine extends dns.promises.Resolver {
   //       <https://github.com/sindresorhus/got/issues/2226>
   //
   async #request(pkt, server, abortController, timeout = this.options.timeout) {
-    // safeguard in case aborted
+    // Safeguard in case aborted
     abortController?.signal?.throwIfAborted();
 
     let localAddress;
@@ -1046,10 +1147,14 @@ class Tangerine extends dns.promises.Resolver {
     let url = `${this.options.protocol}://${server}/dns-query`;
     if (isIPv4(new URL(url).hostname)) {
       localAddress = this.options.ipv4;
-      if (this.options.ipv4LocalPort) localPort = this.options.ipv4LocalPort;
+      if (this.options.ipv4LocalPort) {
+        localPort = this.options.ipv4LocalPort;
+      }
     } else {
       localAddress = this.options.ipv6;
-      if (this.options.ipv6LocalPort) localPort = this.options.ipv6LocalPort;
+      if (this.options.ipv6LocalPort) {
+        localPort = this.options.ipv6LocalPort;
+      }
     }
 
     const options = {
@@ -1057,13 +1162,21 @@ class Tangerine extends dns.promises.Resolver {
       signal: abortController.signal
     };
 
-    if (localAddress !== '0.0.0.0') options.localAddress = localAddress;
-    if (localPort) options.localPort = localPort;
+    if (localAddress !== '0.0.0.0') {
+      options.localAddress = localAddress;
+    }
+
+    if (localPort) {
+      options.localPort = localPort;
+    }
 
     // <https://github.com/hildjj/dohdec/blob/43564118c40f2127af871bdb4d40f615409d4b9c/pkg/dohdec/lib/doh.js#L117-L120>
     if (this.options.requestOptions.method.toLowerCase() === 'get') {
-      if (!dohdec) await pWaitFor(() => Boolean(dohdec));
-      // safeguard in case aborted
+      if (!dohdec) {
+        await pWaitFor(() => Boolean(dohdec));
+      }
+
+      // Safeguard in case aborted
       abortController?.signal?.throwIfAborted();
       url += `?dns=${dohdec.DNSoverHTTPS.base64urlEncode(pkt)}`;
     } else {
@@ -1071,18 +1184,27 @@ class Tangerine extends dns.promises.Resolver {
     }
 
     debug('request', { url, options });
-    const t = setTimeout(() => {
-      if (!abortController?.signal?.aborted) abortController.abort();
+    const timeoutId = setTimeout(() => {
+      if (!abortController?.signal?.aborted) {
+        abortController.abort();
+      }
     }, timeout);
-    const response = await this.request(url, options);
-    clearTimeout(t);
-    return response;
+
+    try {
+      const response = await this.request(url, options);
+      return response;
+    } finally {
+      clearTimeout(timeoutId);
+    }
   }
 
   // <https://github.com/hildjj/dohdec/tree/main/pkg/dohdec>
-  // eslint-disable-next-line complexity
+
   async #query(name, rrtype = 'A', ecsSubnet, abortController) {
-    if (!dohdec) await pWaitFor(() => Boolean(dohdec));
+    if (!dohdec) {
+      await pWaitFor(() => Boolean(dohdec));
+    }
+
     debug('query', {
       name,
       nameToASCII: toASCII(name),
@@ -1097,13 +1219,13 @@ class Tangerine extends dns.promises.Resolver {
           ? await this.options.id()
           : this.options.id,
       rrtype,
-      // mirrors dns module behavior
+      // Mirrors dns module behavior
       name: toASCII(name),
       // <https://github.com/mafintosh/dns-packet/pull/47#issuecomment-1435818437>
       ecsSubnet
     });
     try {
-      // mirror the behavior as noted in built-in DNS
+      // Mirror the behavior as noted in built-in DNS
       // <https://github.com/nodejs/node/issues/33353#issuecomment-627259827>
       let buffer;
       const errors = [];
@@ -1114,7 +1236,7 @@ class Tangerine extends dns.promises.Resolver {
         for (let i = 0; i < this.options.tries; i++) {
           try {
             // <https://github.com/sindresorhus/p-map-series/blob/bc1b9f5e19ed62363bff3d7dc5ecc1fd820ccb51/index.js#L1-L11>
-            // eslint-disable-next-line no-await-in-loop
+
             const response = await this.#request(
               pkt,
               server,
@@ -1122,27 +1244,29 @@ class Tangerine extends dns.promises.Resolver {
               this.options.timeout * 2 ** i
             );
 
-            // if aborted signal then returns early
-            // eslint-disable-next-line max-depth
+            // If aborted signal then returns early
+
             if (response) {
               const { body, headers } = response;
               const statusCode = response.status || response.statusCode;
               debug('response', { statusCode, headers });
 
-              // eslint-disable-next-line max-depth
+
               if (body && statusCode >= 200 && statusCode < 300) {
                 // <https://sindresorhus.com/blog/goodbye-nodejs-buffer>
-                // eslint-disable-next-line max-depth
-                if (Buffer.isBuffer(body)) buffer = body;
-                else if (typeof body.arrayBuffer === 'function')
-                  // eslint-disable-next-line no-await-in-loop
+
+                if (Buffer.isBuffer(body)) {
+                  buffer = body;
+                } else if (typeof body.arrayBuffer === 'function') {
+
                   buffer = Buffer.from(await body.arrayBuffer());
-                // eslint-disable-next-line no-await-in-loop
-                else if (isStream(body)) buffer = await getStream.buffer(body);
-                else {
-                  const err = new TypeError('Unsupported body type');
-                  err.body = body;
-                  throw err;
+                } else if (isStream(body)) {
+
+                  buffer = await getStream.buffer(body);
+                } else {
+                  const error = new TypeError('Unsupported body type');
+                  error.body = body;
+                  throw error;
                 }
 
                 break;
@@ -1153,58 +1277,69 @@ class Tangerine extends dns.promises.Resolver {
                 !abortController?.signal?.aborted &&
                 body &&
                 typeof body.dump === 'function'
-              )
-                // eslint-disable-next-line no-await-in-loop
+              ) {
+
                 await body.dump();
+              }
 
               // <https://github.com/nodejs/undici/blob/00dfd0bd41e73782452aecb728395f354585ca94/lib/core/errors.js#L47-L58>
               const message =
                 http.STATUS_CODES[statusCode] ||
                 this.options.defaultHTTPErrorMessage;
-              const err = new Error(message);
-              err.body = body;
-              err.status = statusCode;
-              err.statusCode = statusCode;
-              err.headers = headers;
-              throw err;
+              const error = new Error(message);
+              error.body = body;
+              error.status = statusCode;
+              error.statusCode = statusCode;
+              error.headers = headers;
+              throw error;
             }
-          } catch (err) {
-            debug(err);
+          } catch (error) {
+            debug(error);
 
             //
             // NOTE: if NOTFOUND error occurs then don't attempt further requests
             // <https://nodejs.org/api/dns.html#dnssetserversservers>
             //
 
-            if (err.code === dns.NOTFOUND) throw err;
+            if (error.code === dns.NOTFOUND) {
+              throw error;
+            }
 
-            if (err.status >= 429) ipErrors.push(err);
+            if (error.status >= 429) {
+              ipErrors.push(error);
+            }
 
-            // break out of the loop if status code was not retryable
+            // Break out of the loop if status code was not retryable
 
             if (
               !(
-                err.statusCode &&
-                this.constructor.RETRY_STATUS_CODES.has(err.statusCode)
+                error.statusCode &&
+                this.constructor.RETRY_STATUS_CODES.has(error.statusCode)
               ) &&
-              !(err.code && this.constructor.RETRY_ERROR_CODES.has(err.code))
-            )
+              !(
+                error.code && this.constructor.RETRY_ERROR_CODES.has(error.code)
+              )
+            ) {
               break;
+            }
           }
         }
 
-        // break out if we had a response
-        if (buffer) break;
+        // Break out if we had a response
+        if (buffer) {
+          break;
+        }
+
         if (ipErrors.length > 0) {
-          // if the `server` had all errors, then remove it and add to end
+          // If the `server` had all errors, then remove it and add to end
           // (this ensures we don't keep retrying servers that keep timing out)
           // (which improves upon default c-ares behavior)
           if (this.options.servers.size > 1 && this.options.smartRotate) {
-            const err = this.constructor.combineErrors([
+            const error = this.constructor.combineErrors([
               new Error('Rotating DNS servers due to issues'),
               ...ipErrors
             ]);
-            this.options.logger.error(err, { server });
+            this.options.logger.error(error, { server });
             this.options.servers.delete(server);
             this.options.servers.add(server);
           }
@@ -1214,16 +1349,20 @@ class Tangerine extends dns.promises.Resolver {
       }
 
       if (!buffer) {
-        if (errors.length > 0) throw this.constructor.combineErrors(errors);
-        // if no errors and no response
+        if (errors.length > 0) {
+          throw this.constructor.combineErrors(errors);
+        }
+
+        // If no errors and no response
         // that must indicate that it was aborted
         throw this.constructor.createError(name, rrtype, dns.CANCELLED);
       }
 
-      // without logging an error here, one might not know
+      // Without logging an error here, one might not know
       // that one or more dns servers have persistent issues
-      if (errors.length > 0)
+      if (errors.length > 0) {
         this.options.logger.error(this.constructor.combineErrors(errors));
+      }
 
       //
       // NOTE: dns-packet does not yet support Uint8Array
@@ -1231,20 +1370,23 @@ class Tangerine extends dns.promises.Resolver {
       //
       // https://github.com/mafintosh/dns-packet/issues/72
       return packet.decode(buffer);
-    } catch (_err) {
-      debug(_err, { name, rrtype, ecsSubnet });
-      if (this.options.returnHTTPErrors) throw _err;
-      const err = this.constructor.createError(
+    } catch (error) {
+      debug(error, { name, rrtype, ecsSubnet });
+      if (this.options.returnHTTPErrors) {
+        throw error;
+      }
+
+      const error_ = this.constructor.createError(
         name,
         rrtype,
-        _err.code,
-        _err.errno
+        error.code,
+        error.errno
       );
-      // then map it to dns.CONNREFUSED
+      // Then map it to dns.CONNREFUSED
       // preserve original error and stack trace
-      err.error = _err;
-      // throwing here saves indentation below
-      throw err;
+      error_.error = error;
+      // Throwing here saves indentation below
+      throw error_;
     }
   }
 
@@ -1256,16 +1398,28 @@ class Tangerine extends dns.promises.Resolver {
       if (!abortController.signal.aborted) {
         try {
           abortController.abort('Cancel invoked');
-        } catch (err) {
-          this.options.logger.debug(err);
+        } catch (error) {
+          this.options.logger.debug(error);
         }
       }
     }
+
+    // Clear all abort controllers from the set to prevent memory leaks
+    this.abortControllers.clear();
   }
 
   #resolveByType(name, options = {}, parentAbortController) {
     return async (type) => {
       const abortController = new AbortController();
+
+      // Set max listeners to prevent memory leak warnings (before adding listeners)
+      setMaxListeners(50, abortController.signal);
+
+      // Also ensure parent abort controller can handle multiple listeners
+      if (parentAbortController && parentAbortController.signal) {
+        setMaxListeners(50, parentAbortController.signal);
+      }
+
       this.abortControllers.add(abortController);
       abortController.signal.addEventListener(
         'abort',
@@ -1279,13 +1433,13 @@ class Tangerine extends dns.promises.Resolver {
         () => {
           try {
             abortController.abort('Parent abort controller aborted');
-          } catch (err) {
-            this.options.logger.debug(err);
+          } catch (error) {
+            this.options.logger.debug(error);
           }
         },
         { once: true }
       );
-      // wrap with try/catch because ENODATA shouldn't cause errors
+      // Wrap with try/catch because ENODATA shouldn't cause errors
       try {
         switch (type) {
           case 'A': {
@@ -1374,11 +1528,14 @@ class Tangerine extends dns.promises.Resolver {
             break;
           }
         }
-      } catch (err) {
-        debug(err);
+      } catch (error) {
+        debug(error);
 
-        if (err.code === dns.NODATA) return;
-        throw err;
+        if (error.code === dns.NODATA) {
+          return;
+        }
+
+        throw error;
       }
     };
   }
@@ -1386,9 +1543,11 @@ class Tangerine extends dns.promises.Resolver {
   // <https://nodejs.org/api/dns.html#dnspromisesresolveanyhostname>
   async resolveAny(name, options = {}, abortController) {
     if (typeof name !== 'string') {
-      const err = new TypeError('The "name" argument must be of type string.');
-      err.code = 'ERR_INVALID_ARG_TYPE';
-      throw err;
+      const error = new TypeError(
+        'The "name" argument must be of type string.'
+      );
+      error.code = 'ERR_INVALID_ARG_TYPE';
+      throw error;
     }
 
     // <https://gist.github.com/andrewcourtice/ef1b8f14935b409cfe94901558ba5594#file-task-ts-L37>
@@ -1396,6 +1555,10 @@ class Tangerine extends dns.promises.Resolver {
     // <https://github.com/nodejs/node/issues/40849>
     if (!abortController) {
       abortController = new AbortController();
+
+      // Set max listeners to prevent memory leak warnings (before adding listeners)
+      setMaxListeners(50, abortController.signal);
+
       this.abortControllers.add(abortController);
       abortController.signal.addEventListener(
         'abort',
@@ -1424,20 +1587,20 @@ class Tangerine extends dns.promises.Resolver {
         }
       );
       return results.flat().filter(Boolean);
-    } catch (err) {
-      err.syscall = 'queryAny';
-      err.message = `queryAny ${err.code} ${name}`;
-      throw err;
+    } catch (error) {
+      error.syscall = 'queryAny';
+      error.message = `queryAny ${error.code} ${name}`;
+      throw error;
     }
   }
 
   setDefaultResultOrder(dnsOrder) {
     if (dnsOrder !== 'ipv4first' && dnsOrder !== 'verbatim') {
-      const err = new TypeError(
+      const error = new TypeError(
         "The argument 'dnsOrder' must be one of: 'verbatim', 'ipv4first'."
       );
-      err.code = 'ERR_INVALID_ARG_VALUE';
-      throw err;
+      error.code = 'ERR_INVALID_ARG_VALUE';
+      throw error;
     }
 
     this.options.dnsOrder = dnsOrder;
@@ -1445,10 +1608,10 @@ class Tangerine extends dns.promises.Resolver {
 
   setServers(servers) {
     if (!Array.isArray(servers) || servers.length === 0) {
-      const err = new TypeError(
+      const error = new TypeError(
         'The "name" argument must be an instance of Array.'
       );
-      err.code = 'ERR_INVALID_ARG_TYPE';
+      error.code = 'ERR_INVALID_ARG_TYPE';
     }
 
     //
@@ -1460,47 +1623,49 @@ class Tangerine extends dns.promises.Resolver {
     this.options.servers = new Set(servers);
   }
 
-  // eslint-disable-next-line max-params
-  spoofPacket(name, rrtype, answers = [], json = false, expires = 30000) {
+
+  spoofPacket(name, rrtype, answers = [], json = false, expires = 30_000) {
     if (typeof name !== 'string') {
-      const err = new TypeError('The "name" argument must be of type string.');
-      err.code = 'ERR_INVALID_ARG_TYPE';
-      throw err;
+      const error = new TypeError(
+        'The "name" argument must be of type string.'
+      );
+      error.code = 'ERR_INVALID_ARG_TYPE';
+      throw error;
     }
 
     if (typeof rrtype !== 'string') {
-      const err = new TypeError(
+      const error = new TypeError(
         'The "rrtype" argument must be of type string.'
       );
-      err.code = 'ERR_INVALID_ARG_TYPE';
-      throw err;
+      error.code = 'ERR_INVALID_ARG_TYPE';
+      throw error;
     }
 
     if (!this.constructor.TYPES.has(rrtype)) {
-      const err = new TypeError("The argument 'rrtype' is invalid.");
-      err.code = 'ERR_INVALID_ARG_VALUE';
-      throw err;
+      const error = new TypeError("The argument 'rrtype' is invalid.");
+      error.code = 'ERR_INVALID_ARG_VALUE';
+      throw error;
     }
 
     if (!Array.isArray(answers)) {
-      const err = new TypeError("The argument 'answers' is invalid.");
-      err.code = 'ERR_INVALID_ARG_VALUE';
-      throw err;
+      const error = new TypeError("The argument 'answers' is invalid.");
+      error.code = 'ERR_INVALID_ARG_VALUE';
+      throw error;
     }
 
-    const obj = {
+    const object = {
       id: 0,
       type: 'response',
       flags: 384,
-      flag_qr: true,
+      flagQr: true,
       opcode: 'QUERY',
-      flag_aa: false,
-      flag_tc: false,
-      flag_rd: true,
-      flag_ra: true,
-      flag_z: false,
-      flag_ad: false,
-      flag_cd: false,
+      flagAa: false,
+      flagTc: false,
+      flagRd: true,
+      flagRa: true,
+      flagZ: false,
+      flagAd: false,
+      flagCd: false,
       rcode: 'NOERROR',
       questions: [{ name, type: rrtype, class: 'IN' }],
       answers: answers.map((answer) => ({
@@ -1520,7 +1685,7 @@ class Tangerine extends dns.promises.Resolver {
           extendedRcode: 0,
           ednsVersion: 0,
           flags: 0,
-          flag_do: false,
+          flagDo: false,
           options: [Array]
         }
       ],
@@ -1529,44 +1694,47 @@ class Tangerine extends dns.promises.Resolver {
         expires instanceof Date ? expires.getTime() : Date.now() + expires
     };
 
-    return json ? JSON.stringify(obj) : obj;
+    return json ? JSON.stringify(object) : object;
   }
 
-  // eslint-disable-next-line complexity
+
   async resolve(name, rrtype = 'A', options = {}, abortController) {
     if (typeof name !== 'string') {
-      const err = new TypeError('The "name" argument must be of type string.');
-      err.code = 'ERR_INVALID_ARG_TYPE';
-      throw err;
+      const error = new TypeError(
+        'The "name" argument must be of type string.'
+      );
+      error.code = 'ERR_INVALID_ARG_TYPE';
+      throw error;
     }
 
     if (typeof rrtype !== 'string') {
-      const err = new TypeError(
+      const error = new TypeError(
         'The "rrtype" argument must be of type string.'
       );
-      err.code = 'ERR_INVALID_ARG_TYPE';
-      throw err;
+      error.code = 'ERR_INVALID_ARG_TYPE';
+      throw error;
     }
 
     if (!this.constructor.TYPES.has(rrtype)) {
-      const err = new TypeError("The argument 'rrtype' is invalid.");
-      err.code = 'ERR_INVALID_ARG_VALUE';
-      throw err;
+      const error = new TypeError("The argument 'rrtype' is invalid.");
+      error.code = 'ERR_INVALID_ARG_VALUE';
+      throw error;
     }
 
-    // edge case where c-ares detects "." as start of string
+    // Edge case where c-ares detects "." as start of string
     // <https://github.com/c-ares/c-ares/blob/38b30bc922c21faa156939bde15ea35332c30e08/src/lib/ares_getaddrinfo.c#L829>
-    if (name !== '.' && (name.startsWith('.') || name.includes('..')))
+    if (name !== '.' && (name.startsWith('.') || name.includes('..'))) {
       throw this.constructor.createError(name, rrtype, dns.BADNAME);
+    }
 
-    // purge cache support
+    // Purge cache support
     let purgeCache;
     if (options?.purgeCache) {
       purgeCache = true;
       delete options.purgeCache;
     }
 
-    // ecsSubnet support
+    // EcsSubnet support
     let ecsSubnet;
     if (options?.ecsSubnet) {
       ecsSubnet = options.ecsSubnet;
@@ -1596,11 +1764,11 @@ class Tangerine extends dns.promises.Resolver {
         } catch {}
       }
 
-      // safeguard in case cache pollution
+      // Safeguard in case cache pollution
       if (data && typeof data === 'object') {
         debug('cache retrieved', key);
         const now = Date.now();
-        // safeguard in case cache pollution
+        // Safeguard in case cache pollution
         if (
           !Number.isFinite(data.expires) ||
           data.expires < now ||
@@ -1610,22 +1778,22 @@ class Tangerine extends dns.promises.Resolver {
           debug('cache expired', key);
           data = undefined;
         } else if (options?.ttl) {
-          // clone the data so that we don't mutate cache (e.g. if it's in-memory)
+          // Clone the data so that we don't mutate cache (e.g. if it's in-memory)
           // <https://nodejs.org/api/globals.html#structuredclonevalue-options>
           // <https://github.com/ungap/structured-clone>
           data = structuredClone(data);
 
-          // returns ms -> s conversion
+          // Returns ms -> s conversion
           const ttl = Math.round((data.expires - now) / 1000);
           const diff = data.ttl - ttl;
 
           for (let i = 0; i < data.answers.length; i++) {
-            // eslint-disable-next-line max-depth
+
             if (typeof data.answers[i].ttl === 'number') {
-              // subtract ttl from answer
+              // Subtract ttl from answer
               data.answers[i].ttl = Math.round(data.answers[i].ttl - diff);
 
-              // eslint-disable-next-line max-depth
+
               if (data.answers[i].ttl <= 0) {
                 debug('answer cache expired', key);
                 data = undefined;
@@ -1635,7 +1803,7 @@ class Tangerine extends dns.promises.Resolver {
           }
         }
 
-        // will only use cache if it's still set after parsing ttl
+        // Will only use cache if it's still set after parsing ttl
         result = data;
       } else {
         data = undefined;
@@ -1646,11 +1814,11 @@ class Tangerine extends dns.promises.Resolver {
     // <https://nodejs.org/api/dns.html#dnspromisesresolvehostname-rrtype>
     //
     // // <https://developers.cloudflare.com/1.1.1.1/encryption/dns-over-https/make-api-requests/#return-codes>
-    // HTTP Status	Meaning
-    // 400	        DNS query not specified or too small.
-    // 413	        DNS query is larger than maximum allowed DNS message size.
-    // 415	        Unsupported content type.
-    // 504	        Resolver timeout while waiting for the query response.
+    // HTTP Status  Meaning
+    // 400          DNS query not specified or too small.
+    // 413          DNS query is larger than maximum allowed DNS message size.
+    // 415          Unsupported content type.
+    // 504          Resolver timeout while waiting for the query response.
     //
     // <https://developers.google.com/speed/public-dns/docs/doh#errors>
     // 400 Bad Request
@@ -1676,6 +1844,10 @@ class Tangerine extends dns.promises.Resolver {
     } else {
       if (!abortController) {
         abortController = new AbortController();
+
+        // Set max listeners to prevent memory leak warnings (before adding listeners)
+        setMaxListeners(50, abortController.signal);
+
         this.abortControllers.add(abortController);
         abortController.signal.addEventListener(
           'abort',
@@ -1686,7 +1858,7 @@ class Tangerine extends dns.promises.Resolver {
         );
       }
 
-      // setImmediate(() => this.cancel());
+      // SetImmediate(() => this.cancel());
       result = await this.#query(name, rrtype, ecsSubnet, abortController);
     }
 
@@ -1725,20 +1897,22 @@ class Tangerine extends dns.promises.Resolver {
             }
           );
         } else if (this.options.cache && !data) {
-          // store in cache based off lowest ttl
+          // Store in cache based off lowest ttl
           let ttl = result.answers
             .map((answer) => answer.ttl)
             .sort()
             .find((ttl) => Number.isFinite(ttl));
-          // if TTL is not a number or is < 1 or is > max then set to default
+          // If TTL is not a number or is < 1 or is > max then set to default
           if (
             !Number.isFinite(ttl) ||
             ttl < 1 ||
             ttl > this.options.maxTTLSeconds
-          )
+          ) {
             ttl = this.options.defaultTTLSeconds;
+          }
+
           result.ttl = ttl;
-          // this supports both redis-based key/value/ttl and simple key/value implementations
+          // This supports both redis-based key/value/ttl and simple key/value implementations
           result.expires = Date.now() + Math.round(result.ttl * 1000);
           const args = [key, result, ...this.options.setCacheArgs(key, result)];
           debug('setting cache', { args });
@@ -1773,12 +1947,13 @@ class Tangerine extends dns.promises.Resolver {
       }
     }
 
-    // if no results then throw ENODATA
+    // If no results then throw ENODATA
     // (hidden option for `lookup` to prevent errors being thrown)
-    if (result.answers.length === 0 && !options.noThrowOnNODATA)
+    if (result.answers.length === 0 && !options.noThrowOnNODATA) {
       throw this.constructor.createError(name, rrtype, dns.NODATA);
+    }
 
-    // filter the answers for the same type
+    // Filter the answers for the same type
     result.answers = result.answers.filter((answer) => answer.type === rrtype);
 
     //
@@ -1789,27 +1964,31 @@ class Tangerine extends dns.promises.Resolver {
       case 'A': {
         // IPv4 addresses `dnsPromises.resolve4()`
         // if options.ttl === true then return [ { address, ttl } ] vs [ address ]
-        if (options?.ttl)
+        if (options?.ttl) {
           return result.answers.map((a) => ({
             ttl: a.ttl,
             address: a.data
           }));
+        }
+
         return result.answers.map((a) => a.data);
       }
 
       case 'AAAA': {
         // IPv6 addresses `dnsPromises.resolve6()`
         // if options.ttl === true then return [ { address, ttl } ] vs [ address ]
-        if (options?.ttl)
+        if (options?.ttl) {
           return result.answers.map((a) => ({
             ttl: a.ttl,
             address: a.data
           }));
+        }
+
         return result.answers.map((a) => a.data);
       }
 
       case 'CAA': {
-        // CA authorization records	`dnsPromises.resolveCaa()`
+        // CA authorization records  `dnsPromises.resolveCaa()`
         // <https://www.rfc-editor.org/rfc/rfc6844#section-3>
         return result.answers.map((a) => ({
           critical: a.data.flags,
@@ -1818,12 +1997,12 @@ class Tangerine extends dns.promises.Resolver {
       }
 
       case 'CNAME': {
-        // canonical name records	`dnsPromises.resolveCname()`
+        // Canonical name records  `dnsPromises.resolveCname()`
         return result.answers.map((a) => a.data);
       }
 
       case 'MX': {
-        // mail exchange records	`dnsPromises.resolveMx()`
+        // Mail exchange records  `dnsPromises.resolveMx()`
         return result.answers.map((a) => ({
           exchange: a.data.exchange,
           priority: a.data.preference
@@ -1831,22 +2010,22 @@ class Tangerine extends dns.promises.Resolver {
       }
 
       case 'NAPTR': {
-        // name authority pointer records `dnsPromises.resolveNaptr()`
+        // Name authority pointer records `dnsPromises.resolveNaptr()`
         return result.answers.map((a) => a.data);
       }
 
       case 'NS': {
-        // name server records	`dnsPromises.resolveNs()`
+        // Name server records  `dnsPromises.resolveNs()`
         return result.answers.map((a) => a.data);
       }
 
       case 'PTR': {
-        // pointer records	`dnsPromises.resolvePtr()`
+        // Pointer records  `dnsPromises.resolvePtr()`
         return result.answers.map((a) => a.data);
       }
 
       case 'SOA': {
-        // start of authority records `dnsPromises.resolveSoa()`
+        // Start of authority records `dnsPromises.resolveSoa()`
         const answers = result.answers.map((a) => ({
           nsname: a.data.mname,
           hostmaster: a.data.rname,
@@ -1863,7 +2042,7 @@ class Tangerine extends dns.promises.Resolver {
       }
 
       case 'SRV': {
-        // service records	`dnsPromises.resolveSrv()`
+        // Service records  `dnsPromises.resolveSrv()`
         return result.answers.map((a) => ({
           name: a.data.target,
           port: a.data.port,
@@ -1873,7 +2052,7 @@ class Tangerine extends dns.promises.Resolver {
       }
 
       case 'TXT': {
-        // text records `dnsPromises.resolveTxt()`
+        // Text records `dnsPromises.resolveTxt()`
         return result.answers.flatMap((a) => {
           //
           // NOTE: we need to support buffer conversion
@@ -1905,8 +2084,10 @@ class Tangerine extends dns.promises.Resolver {
                 typeof d === 'object' &&
                 d.type === 'Buffer' &&
                 Array.isArray(d.data)
-              )
+              ) {
                 return Buffer.from(d.data);
+              }
+
               return d;
             });
           } else if (
@@ -1932,36 +2113,45 @@ class Tangerine extends dns.promises.Resolver {
         // <https://github.com/jpnarkinsky/tangerine/commit/5f70954875aa93ef4acf076172d7540298b0a16b>
         // <https://www.rfc-editor.org/rfc/rfc4398.html>
         return result.answers.map((answer) => {
-          if (!Buffer.isBuffer(answer.data))
-            throw new Error('Buffer was not available');
+          if (!Buffer.isBuffer(answer.data)) {
+            throw new TypeError('Buffer was not available');
+          }
 
           try {
             // <https://github.com/rthalley/dnspython/blob/98b12e9e43847dac615bb690355d2fabaff969d2/dns/rdtypes/ANY/CERT.py#L69>
-            const obj = {
+            const object = {
               name: answer.name,
               ttl: answer.ttl,
-              certificate_type: answer.data.subarray(0, 2).readUInt16BE(),
-              key_tag: answer.data.subarray(2, 4).readUInt16BE(),
+              certificateType: answer.data.subarray(0, 2).readUInt16BE(),
+              keyTag: answer.data.subarray(2, 4).readUInt16BE(),
               algorithm: answer.data.subarray(4, 5).readUInt8(),
               certificate: answer.data.subarray(5).toString('base64')
             };
-            if (this.constructor.CTYPE_BY_VALUE[obj.certificate_type])
-              obj.certificate_type =
-                this.constructor.CTYPE_BY_VALUE[obj.certificate_type];
-            else obj.certificate_type = obj.certificate_type.toString();
-            return obj;
-          } catch (err) {
-            this.options.logger.error(err, { name, rrtype, options, answer });
-            throw err;
+            if (this.constructor.CTYPE_BY_VALUE[object.certificateType]) {
+              object.certificateType =
+                this.constructor.CTYPE_BY_VALUE[object.certificateType];
+            } else {
+              object.certificateType = object.certificateType.toString();
+            }
+
+            return object;
+          } catch (error) {
+            this.options.logger.error(error, {
+              name,
+              rrtype,
+              options,
+              answer
+            });
+            throw error;
           }
         });
       }
 
       case 'TLSA': {
-        // if it returns answers with `type: TLSA` then recursively lookup
+        // If it returns answers with `type: TLSA` then recursively lookup
         // 3 1 1 D6FEA64D4E68CAEAB7CBB2E0F905D7F3CA3308B12FD88C5B469F08AD 7E05C7C7
         return result.answers.map((answer) => {
-          const obj = {
+          const object = {
             name: answer.name,
             ttl: answer.ttl
           };
@@ -1969,22 +2159,22 @@ class Tangerine extends dns.promises.Resolver {
           // <https://www.mailhardener.com/kb/dane>
           // <https://github.com/rthalley/dnspython/blob/98b12e9e43847dac615bb690355d2fabaff969d2/dns/rdtypes/tlsabase.py#L35>
           if (Buffer.isBuffer(answer.data)) {
-            obj.usage = answer.data.subarray(0, 1).readUInt8();
-            obj.selector = answer.data.subarray(1, 2).readUInt8();
-            obj.mtype = answer.data.subarray(2, 3).readUInt8();
-            obj.cert = answer.data.subarray(3);
+            object.usage = answer.data.subarray(0, 1).readUInt8();
+            object.selector = answer.data.subarray(1, 2).readUInt8();
+            object.mtype = answer.data.subarray(2, 3).readUInt8();
+            object.cert = answer.data.subarray(3);
           } else {
-            obj.usage = answer.data.usage;
-            obj.selector = answer.data.selector;
-            obj.mtype = answer.data.matchingType;
-            obj.cert = answer.data.certificate;
+            object.usage = answer.data.usage;
+            object.selector = answer.data.selector;
+            object.mtype = answer.data.matchingType;
+            object.cert = answer.data.certificate;
           }
 
-          // aliases to match Cloudflare DNS response
-          obj.matchingType = obj.mtype;
-          obj.certificate = obj.cert;
+          // Aliases to match Cloudflare DNS response
+          object.matchingType = object.mtype;
+          object.certificate = object.cert;
 
-          return obj;
+          return object;
         });
       }
 
@@ -2000,4 +2190,4 @@ class Tangerine extends dns.promises.Resolver {
   }
 }
 
-module.exports = Tangerine;
+export default Tangerine;
