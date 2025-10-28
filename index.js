@@ -1295,103 +1295,101 @@ class Tangerine extends dns.promises.Resolver {
           },
           { once: true }
         );
-      } finally {
-        this.#releaseAbortController(abortController);
-      }
-      // wrap with try/catch because ENODATA shouldn't cause errors
-      try {
-        switch (type) {
-          case 'A': {
-            const result = await this.resolve4(
-              name,
-              { ...options, ttl: true },
-              abortController
-            );
-            return result.map((r) => ({ type, ...r }));
-          }
+        // wrap with try/catch because ENODATA shouldn't cause errors
+        try {
+          switch (type) {
+            case 'A': {
+              const result = await this.resolve4(
+                name,
+                { ...options, ttl: true },
+                abortController
+              );
+              return result.map((r) => ({ type, ...r }));
+            }
 
-          case 'AAAA': {
-            const result = await this.resolve6(
-              name,
-              { ...options, ttl: true },
-              abortController
-            );
-            return result.map((r) => ({ type, ...r }));
-          }
+            case 'AAAA': {
+              const result = await this.resolve6(
+                name,
+                { ...options, ttl: true },
+                abortController
+              );
+              return result.map((r) => ({ type, ...r }));
+            }
 
-          case 'CNAME': {
-            const result = await this.resolveCname(
-              name,
-              options,
-              abortController
-            );
-            return result.map((value) => ({ type, value }));
-          }
+            case 'CNAME': {
+              const result = await this.resolveCname(
+                name,
+                options,
+                abortController
+              );
+              return result.map((value) => ({ type, value }));
+            }
 
-          case 'MX': {
-            const result = await this.resolveMx(name, options, abortController);
-            return result.map((r) => ({ type, ...r }));
-          }
+            case 'MX': {
+              const result = await this.resolveMx(name, options, abortController);
+              return result.map((r) => ({ type, ...r }));
+            }
 
-          case 'NAPTR': {
-            const result = await this.resolveNaptr(
-              name,
-              options,
-              abortController
-            );
-            return result.map((value) => ({ type, value }));
-          }
+            case 'NAPTR': {
+              const result = await this.resolveNaptr(
+                name,
+                options,
+                abortController
+              );
+              return result.map((value) => ({ type, value }));
+            }
 
-          case 'NS': {
-            const result = await this.resolveNs(name, options, abortController);
-            return result.map((value) => ({ type, value }));
-          }
+            case 'NS': {
+              const result = await this.resolveNs(name, options, abortController);
+              return result.map((value) => ({ type, value }));
+            }
 
-          case 'PTR': {
-            const result = await this.resolvePtr(
-              name,
-              options,
-              abortController
-            );
-            return result.map((value) => ({ type, value }));
-          }
+            case 'PTR': {
+              const result = await this.resolvePtr(
+                name,
+                options,
+                abortController
+              );
+              return result.map((value) => ({ type, value }));
+            }
 
-          case 'SOA': {
-            const result = await this.resolveSoa(
-              name,
-              options,
-              abortController
-            );
-            return { type, ...result };
-          }
+            case 'SOA': {
+              const result = await this.resolveSoa(
+                name,
+                options,
+                abortController
+              );
+              return { type, ...result };
+            }
 
-          case 'SRV': {
-            const result = await this.resolveSrv(
-              name,
-              options,
-              abortController
-            );
-            return result.map((value) => ({ type, value }));
-          }
+            case 'SRV': {
+              const result = await this.resolveSrv(
+                name,
+                options,
+                abortController
+              );
+              return result.map((value) => ({ type, value }));
+            }
 
-          case 'TXT': {
-            const result = await this.resolveTxt(
-              name,
-              options,
-              abortController
-            );
-            return result.map((entries) => ({ type, entries }));
-          }
+            case 'TXT': {
+              const result = await this.resolveTxt(
+                name,
+                options,
+                abortController
+              );
+              return result.map((entries) => ({ type, entries }));
+            }
 
-          default: {
-            break;
+            default: {
+              break;
+            }
           }
+        } catch (err) {
+          debug(err);
+
+          if (err.code === dns.NODATA) return;
+          throw err;
         }
-      } catch (err) {
-        debug(err);
-
-        if (err.code === dns.NODATA) return;
-        throw err;
       } finally {
         this.#releaseAbortController(abortController);
       }
@@ -1421,8 +1419,9 @@ class Tangerine extends dns.promises.Resolver {
             this.constructor.ANY_TYPES.length,
           abortController.signal
         );
-      } finally {
+      } catch (err) {
         this.#releaseAbortController(abortController);
+        throw err;
       }
     }
 
