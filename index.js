@@ -1248,6 +1248,23 @@ class Tangerine extends dns.promises.Resolver {
     }
   }
 
+  // #createAbortController and #releaseAbortController manage all AbortController instances created by this resolver
+  // - to support cancel() and
+  // - to avoid keeping references in this.abortControllers after a query is finished (which would create a memory leak)
+  #createAbortController() {
+    const abortController = new AbortController();
+    this.abortControllers.add(abortController);
+    return abortController;
+  }
+
+  #releaseAbortController(abortController) {
+    try {
+      this.abortControllers.delete(abortController);
+    } catch (err) {
+      this.options.logger.debug(err);
+    }
+  }
+
   // Cancel all outstanding DNS queries made by this resolver
   // NOTE: callbacks not currently called with ECANCELLED (prob need to alter got options)
   //       (instead they are called with "ABORT_ERR"; see ABORT_ERROR_CODES)
@@ -1265,120 +1282,116 @@ class Tangerine extends dns.promises.Resolver {
 
   #resolveByType(name, options = {}, parentAbortController) {
     return async (type) => {
-      const abortController = new AbortController();
-      this.abortControllers.add(abortController);
-      abortController.signal.addEventListener(
-        'abort',
-        () => {
-          this.abortControllers.delete(abortController);
-        },
-        { once: true }
-      );
-      parentAbortController.signal.addEventListener(
-        'abort',
-        () => {
-          try {
-            abortController.abort('Parent abort controller aborted');
-          } catch (err) {
-            this.options.logger.debug(err);
-          }
-        },
-        { once: true }
-      );
-      // wrap with try/catch because ENODATA shouldn't cause errors
+      const abortController = this.#createAbortController();
       try {
-        switch (type) {
-          case 'A': {
-            const result = await this.resolve4(
-              name,
-              { ...options, ttl: true },
-              abortController
-            );
-            return result.map((r) => ({ type, ...r }));
-          }
+        parentAbortController.signal.addEventListener(
+          'abort',
+          () => {
+            try {
+              abortController.abort('Parent abort controller aborted');
+            } catch (err) {
+              this.options.logger.debug(err);
+            }
+          },
+          { once: true }
+        );
+        // wrap with try/catch because ENODATA shouldn't cause errors
+        try {
+          switch (type) {
+            case 'A': {
+              const result = await this.resolve4(
+                name,
+                { ...options, ttl: true },
+                abortController
+              );
+              return result.map((r) => ({ type, ...r }));
+            }
 
-          case 'AAAA': {
-            const result = await this.resolve6(
-              name,
-              { ...options, ttl: true },
-              abortController
-            );
-            return result.map((r) => ({ type, ...r }));
-          }
+            case 'AAAA': {
+              const result = await this.resolve6(
+                name,
+                { ...options, ttl: true },
+                abortController
+              );
+              return result.map((r) => ({ type, ...r }));
+            }
 
-          case 'CNAME': {
-            const result = await this.resolveCname(
-              name,
-              options,
-              abortController
-            );
-            return result.map((value) => ({ type, value }));
-          }
+            case 'CNAME': {
+              const result = await this.resolveCname(
+                name,
+                options,
+                abortController
+              );
+              return result.map((value) => ({ type, value }));
+            }
 
-          case 'MX': {
-            const result = await this.resolveMx(name, options, abortController);
-            return result.map((r) => ({ type, ...r }));
-          }
+            case 'MX': {
+              const result = await this.resolveMx(name, options, abortController);
+              return result.map((r) => ({ type, ...r }));
+            }
 
-          case 'NAPTR': {
-            const result = await this.resolveNaptr(
-              name,
-              options,
-              abortController
-            );
-            return result.map((value) => ({ type, value }));
-          }
+            case 'NAPTR': {
+              const result = await this.resolveNaptr(
+                name,
+                options,
+                abortController
+              );
+              return result.map((value) => ({ type, value }));
+            }
 
-          case 'NS': {
-            const result = await this.resolveNs(name, options, abortController);
-            return result.map((value) => ({ type, value }));
-          }
+            case 'NS': {
+              const result = await this.resolveNs(name, options, abortController);
+              return result.map((value) => ({ type, value }));
+            }
 
-          case 'PTR': {
-            const result = await this.resolvePtr(
-              name,
-              options,
-              abortController
-            );
-            return result.map((value) => ({ type, value }));
-          }
+            case 'PTR': {
+              const result = await this.resolvePtr(
+                name,
+                options,
+                abortController
+              );
+              return result.map((value) => ({ type, value }));
+            }
 
-          case 'SOA': {
-            const result = await this.resolveSoa(
-              name,
-              options,
-              abortController
-            );
-            return { type, ...result };
-          }
+            case 'SOA': {
+              const result = await this.resolveSoa(
+                name,
+                options,
+                abortController
+              );
+              return { type, ...result };
+            }
 
-          case 'SRV': {
-            const result = await this.resolveSrv(
-              name,
-              options,
-              abortController
-            );
-            return result.map((value) => ({ type, value }));
-          }
+            case 'SRV': {
+              const result = await this.resolveSrv(
+                name,
+                options,
+                abortController
+              );
+              return result.map((value) => ({ type, value }));
+            }
 
-          case 'TXT': {
-            const result = await this.resolveTxt(
-              name,
-              options,
-              abortController
-            );
-            return result.map((entries) => ({ type, entries }));
-          }
+            case 'TXT': {
+              const result = await this.resolveTxt(
+                name,
+                options,
+                abortController
+              );
+              return result.map((entries) => ({ type, entries }));
+            }
 
-          default: {
-            break;
+            default: {
+              break;
+            }
           }
+        } catch (err) {
+          debug(err);
+
+          if (err.code === dns.NODATA) return;
+          throw err;
         }
-      } catch (err) {
-        debug(err);
-
-        if (err.code === dns.NODATA) return;
-        throw err;
+      } finally {
+        this.#releaseAbortController(abortController);
       }
     };
   }
@@ -1394,23 +1407,22 @@ class Tangerine extends dns.promises.Resolver {
     // <https://gist.github.com/andrewcourtice/ef1b8f14935b409cfe94901558ba5594#file-task-ts-L37>
     // <https://github.com/nodejs/undici/blob/0badd390ad5aa531a66aacee54da664468aa1577/lib/api/api-fetch/request.js#L280-L295>
     // <https://github.com/nodejs/node/issues/40849>
+    let mustReleaseAbortController = false;
     if (!abortController) {
-      abortController = new AbortController();
-      this.abortControllers.add(abortController);
-      abortController.signal.addEventListener(
-        'abort',
-        () => {
-          this.abortControllers.delete(abortController);
-        },
-        { once: true }
-      );
+      abortController = this.#createAbortController();
+      mustReleaseAbortController = true;
 
-      // <https://github.com/nodejs/undici/pull/1910/commits/7615308a92d3c8c90081fb99c55ab8bd59212396>
-      setMaxListeners(
-        getEventListeners(abortController.signal, 'abort').length +
-          this.constructor.ANY_TYPES.length,
-        abortController.signal
-      );
+      try {
+        // <https://github.com/nodejs/undici/pull/1910/commits/7615308a92d3c8c90081fb99c55ab8bd59212396>
+        setMaxListeners(
+          getEventListeners(abortController.signal, 'abort').length +
+            this.constructor.ANY_TYPES.length,
+          abortController.signal
+        );
+      } catch (err) {
+        this.#releaseAbortController(abortController);
+        throw err;
+      }
     }
 
     try {
@@ -1428,6 +1440,10 @@ class Tangerine extends dns.promises.Resolver {
       err.syscall = 'queryAny';
       err.message = `queryAny ${err.code} ${name}`;
       throw err;
+    } finally {
+      if (mustReleaseAbortController) {
+        this.#releaseAbortController(abortController);
+      }
     }
   }
 
@@ -1674,20 +1690,20 @@ class Tangerine extends dns.promises.Resolver {
     if (this.options.cache && result) {
       debug(`cached result found for "${key}"`);
     } else {
+      let mustReleaseAbortController = false;
       if (!abortController) {
-        abortController = new AbortController();
-        this.abortControllers.add(abortController);
-        abortController.signal.addEventListener(
-          'abort',
-          () => {
-            this.abortControllers.delete(abortController);
-          },
-          { once: true }
-        );
+        abortController = this.#createAbortController();
+        mustReleaseAbortController = true;
       }
 
-      // setImmediate(() => this.cancel());
-      result = await this.#query(name, rrtype, ecsSubnet, abortController);
+      try {
+        // setImmediate(() => this.cancel());
+        result = await this.#query(name, rrtype, ecsSubnet, abortController);
+      } finally {
+        if (mustReleaseAbortController) {
+          this.#releaseAbortController(abortController);
+        }
+      }
     }
 
     // <https://github.com/m13253/dns-over-https/blob/2e36b4ebcdb8a1a102ea86370d7f8b1f1e72380a/json-dns/response.go#L50-L74>
